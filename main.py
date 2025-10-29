@@ -2,12 +2,19 @@ import zmq
 import json
 import zlib
 import requests
-from datetime import datetime
-from time import time, sleep
+import threading
 import math
 import re
-import threading
+from datetime import datetime
+from time import time, sleep
 from flask import Flask
+
+# === Flask setup (for Render + UptimeRobot) ===
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "✅ EDDN Trading Alerts is running!"
 
 # === Telegram setup ===
 BOT_TOKEN = "8082600371:AAFYY9g-RW2TFovgnrX7JfncCWVHxY4XzYs"
@@ -21,8 +28,8 @@ INARA_API_KEY = "4k2e3fepus8w8skc0kw0csgw4s4ww08oo4c8wcc"
 PROFIT_THRESHOLD = 40000
 SUPPLY_THRESHOLD = 5000
 DEMAND_THRESHOLD = 5000
-MAX_DISTANCE_LY = 1490  # LY limit for filtering
-ALERT_EXPIRY = 3 * 60 * 60  # 3 hours
+MAX_DISTANCE_LY = 1490  # maximum system distance allowed
+MAX_SELL_DISTANCE = 120  # max distance for profitable trades
 
 # === Cache & duplicate management ===
 markets = {}
@@ -31,8 +38,9 @@ alert_timestamps = {}
 station_cache = {}
 system_cache = {}
 carrier_name_cache = {}
+ALERT_EXPIRY = 3 * 60 * 60  # 3 hours
 
-# Recognize a Fleet Carrier callsign
+# Fleet Carrier code regex
 FC_CODE_RE = re.compile(r"\b[A-Z0-9]{3}-[A-Z0-9]{3}\b", re.IGNORECASE)
 
 
@@ -66,16 +74,18 @@ def calc_distance_ly(sys1, sys2):
         dx = c1["x"] - c2["x"]
         dy = c1["y"] - c2["y"]
         dz = c1["z"] - c2["z"]
-        return round(math.sqrt(dx*dx + dy*dy + dz*dz), 2)
+        return round(math.sqrt(dx * dx + dy * dy + dz * dz), 2)
     except Exception:
         return None
 
 
 # === EDSM Station Lookup ===
 def get_station_data(system_name, station_name):
+    """Fetch station type, pad size, and distance-from-star from EDSM."""
     key = f"{system_name}|{station_name}"
     if key in station_cache:
         return station_cache[key]
+
     try:
         url = f"https://www.edsm.net/api-system-v1/stations?systemName={system_name}"
         r = requests.get(url, timeout=10)
@@ -108,33 +118,46 @@ def get_station_data(system_name, station_name):
 
         station_cache[key] = {"type": "Unknown", "pad": "Unknown", "distance": "N/A"}
         return station_cache[key]
+
     except Exception as e:
         print(f"⚠️ EDSM lookup failed for {station_name} in {system_name}: {e}")
         return {"type": "Unknown", "pad": "Unknown", "distance": "N/A"}
 
 
-# === Inara: Resolve Fleet Carrier full name ===
-def get_carrier_fullname_from_inara(callsign: str) -> str | None:
+# === Inara: Resolve Fleet Carrier callsign to full name ===
+def get_carrier_fullname_from_inara(callsign: str):
     key = callsign.upper()
     if key in carrier_name_cache:
         return carrier_name_cache[key]
+
     try:
         payload = {
-            "header": {"appName": "EDDNTradeAlerts", "appVersion": "1.0", "APIkey": INARA_API_KEY},
-            "events": [{"eventName": "getFleetCarrier", "eventData": {"searchName": callsign}}],
+            "header": {
+                "appName": "EDDNTradeAlerts",
+                "appVersion": "1.0",
+                "APIkey": INARA_API_KEY
+            },
+            "events": [{
+                "eventName": "getFleetCarrier",
+                "eventData": {"searchName": callsign}
+            }]
         }
         resp = requests.post(INARA_API_URL, json=payload, timeout=12)
         data = resp.json()
+
         full_name = None
         if isinstance(data, dict) and "events" in data and data["events"]:
             ev = data["events"][0]
             ed = ev.get("eventData", {}) if isinstance(ev, dict) else {}
             full_name = ed.get("name") or ed.get("carrierName") or ed.get("fleetCarrierName")
+
         if full_name:
             carrier_name_cache[key] = full_name
             return full_name
+
     except Exception as e:
         print(f"⚠️ Inara lookup failed for {callsign}: {e}")
+
     carrier_name_cache[key] = None
     return None
 
@@ -142,8 +165,10 @@ def get_carrier_fullname_from_inara(callsign: str) -> str | None:
 def prettify_station_name_with_fc_fullname(station_name: str, station_type: str) -> str:
     if "fleet carrier" not in station_type.lower():
         return station_name
+
     if "(" in station_name and ")" in station_name and FC_CODE_RE.search(station_name):
         return station_name
+
     m = FC_CODE_RE.search(station_name)
     callsign = m.group(0).upper() if m else station_name.strip().upper()
     full = get_carrier_fullname_from_inara(callsign)
@@ -152,27 +177,30 @@ def prettify_station_name_with_fc_fullname(station_name: str, station_type: str)
     return callsign
 
 
-# === Telegram send ===
+# === Telegram send function ===
 def send_alert(buy_station, buy_system, buy_type,
                sell_station, sell_system, sell_type,
                commodity, buy_price, sell_price, profit,
                supply, demand, last_update):
-
+    
     buy_info = get_station_data(buy_system, buy_station)
     sell_info = get_station_data(sell_system, sell_station)
 
-    # Skip buying from Fleet Carriers
+    # Skip Planetary Outposts
+    if "planetary outpost" in buy_info["type"].lower() or "planetary outpost" in sell_info["type"].lower():
+        return
+
+    # Skip if buying from a fleet carrier
     if "fleet carrier" in buy_info["type"].lower():
         return
-    if "planetary outpost" in buy_info["type"].lower() or "planetary outpost" in sell_info["type"].lower():
+
+    # Distance between systems
+    ly_distance = calc_distance_ly(buy_system, sell_system)
+    if ly_distance is None or ly_distance > MAX_SELL_DISTANCE:
         return
 
     buy_display = prettify_station_name_with_fc_fullname(buy_station, buy_info["type"])
     sell_display = prettify_station_name_with_fc_fullname(sell_station, sell_info["type"])
-
-    ly_distance = calc_distance_ly(buy_system, sell_system)
-    if ly_distance is None or ly_distance > 120:
-        return
 
     message = (
         f"🚀 <b>Trade Alert</b>\n\n"
@@ -196,21 +224,22 @@ def send_alert(buy_station, buy_system, buy_type,
         f"🕒 Updated: {last_update.strftime('%Y-%m-%d %H:%M:%S')} UTC"
     )
 
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": CHAT_ID, "text": message, "parse_mode": "HTML"}
     try:
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-        requests.post(url, json={"chat_id": CHAT_ID, "text": message, "parse_mode": "HTML"}, timeout=10)
+        requests.post(url, json=payload, timeout=10)
         print(f"✅ Trade alert sent ({commodity}) — Distance {ly_distance:.2f} LY")
     except Exception as e:
         print("⚠️ Telegram send error:", e)
 
 
-# === ZMQ listener ===
+# === EDDN Listener ===
 def start_eddn_listener():
+    print("🛰️ Listening for trades (>40k Cr/ton, supply & demand >5000)...")
     context = zmq.Context()
     socket = context.socket(zmq.SUB)
     socket.connect("tcp://eddn.edcd.io:9500")
     socket.setsockopt_string(zmq.SUBSCRIBE, '')
-    print("🛰️ Listening for trades...")
 
     while True:
         try:
@@ -226,12 +255,6 @@ def start_eddn_listener():
             station = msg.get("stationName")
             station_type = msg.get("stationType", "Unknown")
             commodities = msg.get("commodities", [])
-
-            # Purge old alerts
-            for k in list(alert_timestamps.keys()):
-                if time() - alert_timestamps[k] > ALERT_EXPIRY:
-                    sent_alerts.discard(k)
-                    alert_timestamps.pop(k)
 
             for c in commodities:
                 name = c.get("name", "").lower()
@@ -252,17 +275,25 @@ def start_eddn_listener():
                     if entry["station"] == station and entry["system"] == system:
                         entry.update({
                             "stationType": station_type,
-                            "buy": buy, "sell": sell,
-                            "stock": stock, "demand": demand,
+                            "buy": buy,
+                            "sell": sell,
+                            "stock": stock,
+                            "demand": demand,
                             "updated": timestamp
                         })
                         updated = True
                         break
+
                 if not updated:
                     markets[name].append({
-                        "station": station, "system": system, "stationType": station_type,
-                        "buy": buy, "sell": sell, "stock": stock,
-                        "demand": demand, "updated": timestamp
+                        "station": station,
+                        "system": system,
+                        "stationType": station_type,
+                        "buy": buy,
+                        "sell": sell,
+                        "stock": stock,
+                        "demand": demand,
+                        "updated": timestamp
                     })
 
                 for entry in markets[name]:
@@ -275,39 +306,46 @@ def start_eddn_listener():
                     key_buy = f"{name}|{station}|{entry['station']}"
                     key_sell = f"{name}|{entry['station']}|{station}"
 
-                    if (profit_buy > PROFIT_THRESHOLD and stock > SUPPLY_THRESHOLD and
-                        entry["demand"] > DEMAND_THRESHOLD and key_buy not in sent_alerts):
-                        send_alert(station, system, station_type,
-                                   entry["station"], entry["system"], entry["stationType"],
-                                   name, buy, entry["sell"], profit_buy,
-                                   stock, entry["demand"], timestamp)
+                    if (profit_buy > PROFIT_THRESHOLD and
+                        stock > SUPPLY_THRESHOLD and
+                        entry["demand"] > DEMAND_THRESHOLD and
+                        key_buy not in sent_alerts):
+
+                        send_alert(
+                            buy_station=station, buy_system=system, buy_type=station_type,
+                            sell_station=entry["station"], sell_system=entry["system"], sell_type=entry["stationType"],
+                            commodity=name,
+                            buy_price=buy, sell_price=entry["sell"], profit=profit_buy,
+                            supply=stock, demand=entry["demand"],
+                            last_update=timestamp
+                        )
                         sent_alerts.add(key_buy)
                         alert_timestamps[key_buy] = time()
 
-                    if (profit_sell > PROFIT_THRESHOLD and entry["stock"] > SUPPLY_THRESHOLD and
-                        demand > DEMAND_THRESHOLD and key_sell not in sent_alerts):
-                        send_alert(entry["station"], entry["system"], entry["stationType"],
-                                   station, system, station_type,
-                                   name, entry["buy"], sell, profit_sell,
-                                   entry["stock"], demand, timestamp)
+                    if (profit_sell > PROFIT_THRESHOLD and
+                        entry["stock"] > SUPPLY_THRESHOLD and
+                        demand > DEMAND_THRESHOLD and
+                        key_sell not in sent_alerts):
+
+                        send_alert(
+                            buy_station=entry["station"], buy_system=entry["system"], buy_type=entry["stationType"],
+                            sell_station=station, sell_system=system, sell_type=station_type,
+                            commodity=name,
+                            buy_price=entry["buy"], sell_price=sell, profit=profit_sell,
+                            supply=entry["stock"], demand=demand,
+                            last_update=timestamp
+                        )
                         sent_alerts.add(key_sell)
                         alert_timestamps[key_sell] = time()
+
         except Exception as e:
             print("⚠️ Listener error:", e)
             sleep(2)
 
 
-# === Flask server for Render keep-alive ===
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "EDDN Trading Alerts is running 🚀", 200
-
-
+# === MAIN ENTRY ===
 if __name__ == "__main__":
-    # Run listener in a background thread
     t = threading.Thread(target=start_eddn_listener, daemon=True)
     t.start()
-    # Run lightweight Flask server for pinger
-    app.run(host="0.0.0.0", port=10000)
+    print("✅ Background listener started.")
+    app.run(host="0.0.0.0", port=10000, debug=False, use_reloader=False)
