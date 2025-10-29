@@ -17,8 +17,8 @@ INARA_API_KEY = "4k2e3fepus8w8skc0kw0csgw4s4ww08oo4c8wcc"  # your Inara API key
 
 # === Trade filters ===
 PROFIT_THRESHOLD = 40000
-SUPPLY_THRESHOLD = 50
-DEMAND_THRESHOLD = 50
+SUPPLY_THRESHOLD = 5000
+DEMAND_THRESHOLD = 5000
 MAX_DISTANCE_LY = 1490  # only alert if systems are within 15 LY (adjust as you like)
 
 # === Cache & duplicate management ===
