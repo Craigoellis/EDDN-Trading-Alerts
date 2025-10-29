@@ -1,0 +1,6 @@
+services:
+  - type: worker
+    name: eddn-trading-alerts
+    env: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python main.py"
