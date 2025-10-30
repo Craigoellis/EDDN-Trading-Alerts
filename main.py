@@ -1,18 +1,12 @@
 import json
+import zlib
 import requests
-import threading
+from datetime import datetime, timezone
+from time import time
 import math
 import re
-from datetime import datetime, timezone
-from time import time, sleep
 from flask import Flask
-
-# === Flask setup (for Render + UptimeRobot) ===
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "✅ EDDN Trading Alerts is running (HTTPS polling mode)!"
+from apscheduler.schedulers.background import BackgroundScheduler
 
 # === Telegram setup ===
 BOT_TOKEN = "8082600371:AAFYY9g-RW2TFovgnrX7JfncCWVHxY4XzYs"
@@ -26,11 +20,9 @@ INARA_API_KEY = "4k2e3fepus8w8skc0kw0csgw4s4ww08oo4c8wcc"
 PROFIT_THRESHOLD = 40000
 SUPPLY_THRESHOLD = 5000
 DEMAND_THRESHOLD = 5000
-MAX_DISTANCE_LY = 1500
-MAX_SELL_DISTANCE = 120  # Max LY between systems for alert
-POLL_INTERVAL = 15  # seconds between HTTPS checks
+MAX_DISTANCE_LY = 120
 
-# === Cache & duplicate management ===
+# === Cache ===
 markets = {}
 sent_alerts = set()
 alert_timestamps = {}
@@ -39,11 +31,11 @@ system_cache = {}
 carrier_name_cache = {}
 ALERT_EXPIRY = 3 * 60 * 60  # 3 hours
 
-# === Fleet Carrier pattern ===
+# Regex for Fleet Carrier codes (e.g. ABC-123)
 FC_CODE_RE = re.compile(r"\b[A-Z0-9]{3}-[A-Z0-9]{3}\b", re.IGNORECASE)
 
 
-# === EDSM System Distance Lookup ===
+# === EDSM System Lookup ===
 def get_system_coords(system_name):
     if system_name in system_cache:
         return system_cache[system_name]
@@ -122,11 +114,12 @@ def get_station_data(system_name, station_name):
         return {"type": "Unknown", "pad": "Unknown", "distance": "N/A"}
 
 
-# === Inara: Resolve Fleet Carrier callsign ===
-def get_carrier_fullname_from_inara(callsign: str):
+# === Inara Fleet Carrier Name Lookup ===
+def get_carrier_fullname_from_inara(callsign: str) -> str | None:
     key = callsign.upper()
     if key in carrier_name_cache:
         return carrier_name_cache[key]
+
     try:
         payload = {
             "header": {"appName": "EDDNTradeAlerts", "appVersion": "1.0", "APIkey": INARA_API_KEY},
@@ -134,7 +127,6 @@ def get_carrier_fullname_from_inara(callsign: str):
         }
         resp = requests.post(INARA_API_URL, json=payload, timeout=12)
         data = resp.json()
-
         full_name = None
         if isinstance(data, dict) and "events" in data and data["events"]:
             ev = data["events"][0]
@@ -144,6 +136,7 @@ def get_carrier_fullname_from_inara(callsign: str):
         if full_name:
             carrier_name_cache[key] = full_name
             return full_name
+
     except Exception as e:
         print(f"⚠️ Inara lookup failed for {callsign}: {e}")
 
@@ -154,126 +147,112 @@ def get_carrier_fullname_from_inara(callsign: str):
 def prettify_station_name_with_fc_fullname(station_name: str, station_type: str) -> str:
     if "fleet carrier" not in station_type.lower():
         return station_name
+
     if "(" in station_name and ")" in station_name and FC_CODE_RE.search(station_name):
         return station_name
+
     m = FC_CODE_RE.search(station_name)
     callsign = m.group(0).upper() if m else station_name.strip().upper()
     full = get_carrier_fullname_from_inara(callsign)
-    if full:
-        return f"{full} ({callsign})"
-    return callsign
+    return f"{full} ({callsign})" if full else callsign
 
 
-# === Telegram send function ===
+# === Telegram Alert ===
 def send_alert(buy_station, buy_system, buy_type,
                sell_station, sell_system, sell_type,
                commodity, buy_price, sell_price, profit,
                supply, demand, last_update):
-    
     buy_info = get_station_data(buy_system, buy_station)
     sell_info = get_station_data(sell_system, sell_station)
 
-    # Skip unwanted locations
     if "fleet carrier" in buy_info["type"].lower():
         return
     if "planetary outpost" in buy_info["type"].lower() or "planetary outpost" in sell_info["type"].lower():
         return
 
-    ly_distance = calc_distance_ly(buy_system, sell_system)
-    if ly_distance is None or ly_distance > MAX_SELL_DISTANCE:
-        return
-
     buy_display = prettify_station_name_with_fc_fullname(buy_station, buy_info["type"])
     sell_display = prettify_station_name_with_fc_fullname(sell_station, sell_info["type"])
+
+    ly_distance = calc_distance_ly(buy_system, sell_system)
+    if ly_distance is None or ly_distance > MAX_DISTANCE_LY:
+        return
 
     message = (
         f"🚀 <b>Trade Alert</b>\n\n"
         f"💰 <b>{commodity.title()}</b>\n"
         f"📈 Profit: +{profit:,} Cr/ton\n"
-        f"📏 Distance: {ly_distance:.2f} LY\n\n"
+        f"📏 Distance: {ly_distance:.2f} LY between systems\n\n"
         f"🛒 <b>BUY FROM</b>\n"
         f"🏙️ {buy_display} ({buy_info['type']})\n"
         f"📍 {buy_system}\n"
-        f"💵 {buy_price:,} Cr | 📦 {supply:,}\n\n"
+        f"🛬 Pad: {buy_info['pad']}\n"
+        f"☀️ Distance: {buy_info['distance']} Ls\n"
+        f"💵 Price: {buy_price:,} Cr\n"
+        f"📦 Supply: {supply:,}\n\n"
         f"💼 <b>SELL TO</b>\n"
         f"🏙️ {sell_display} ({sell_info['type']})\n"
         f"📍 {sell_system}\n"
-        f"💵 {sell_price:,} Cr | 📦 {demand:,}\n\n"
-        f"🕒 {last_update.strftime('%Y-%m-%d %H:%M:%S')} UTC"
+        f"🛬 Pad: {sell_info['pad']}\n"
+        f"☀️ Distance: {sell_info['distance']} Ls\n"
+        f"💵 Price: {sell_price:,} Cr\n"
+        f"📦 Demand: {demand:,}\n\n"
+        f"🕒 Updated: {last_update.strftime('%Y-%m-%d %H:%M:%S')} UTC"
     )
 
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": message, "parse_mode": "HTML"}
     try:
-        requests.post(url, json=payload, timeout=10)
-        print(f"✅ Sent trade alert for {commodity} — {profit:,} Cr/ton, {ly_distance:.1f} LY")
+        requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                      json={"chat_id": CHAT_ID, "text": message, "parse_mode": "HTML"},
+                      timeout=10)
+        print(f"✅ Sent alert for {commodity} ({profit:,} Cr/ton, {ly_distance:.1f} LY)")
     except Exception as e:
-        print("⚠️ Telegram send error:", e)
+        print(f"⚠️ Telegram send error: {e}")
 
 
-# === HTTPS polling fallback listener ===
+# === Polling Function (runs once per cycle) ===
 def start_eddn_listener():
-    print("🛰️ HTTPS polling mode active — listening for trades every 15s...")
+    print("🛰️ HTTPS polling mode active — listening for trades (single cycle)...")
 
-    while True:
-        try:
-            r = requests.get("https://eddbapi-python.vercel.app/eddn/latest", timeout=20)
-            if r.status_code != 200:
-                print(f"⚠️ Data source error: {r.status_code}")
-                sleep(POLL_INTERVAL)
+    try:
+        r = requests.get("https://eddbapi-python.vercel.app/eddn/latest", timeout=20)
+        if r.status_code != 200:
+            print(f"⚠️ Data source error: {r.status_code}")
+            return
+        data = r.json()
+        if not data:
+            print("⚠️ No trade data returned.")
+            return
+
+        print(f"📦 Retrieved {len(data)} messages... scanning for trades...")
+
+        for json_data in data:
+            schema = json_data.get("$schemaRef", "")
+            if "commodity" not in schema:
                 continue
 
-            data = r.json()
-            if not data:
-                print("⚠️ No trade data returned, retrying...")
-                sleep(POLL_INTERVAL)
-                continue
+            msg = json_data["message"]
+            system = msg.get("systemName")
+            station = msg.get("stationName")
+            station_type = msg.get("stationType", "Unknown")
+            commodities = msg.get("commodities", [])
 
-            print(f"📦 Retrieved {len(data)} messages... scanning for trades...")
+            for c in commodities:
+                name = c.get("name", "").lower()
+                buy = c.get("buyPrice", 0)
+                sell = c.get("sellPrice", 0)
+                stock = c.get("stock", 0)
+                demand = c.get("demand", 0)
+                timestamp = datetime.now(timezone.utc)
 
-            for json_data in data:
-                schema = json_data.get("$schemaRef", "")
-                if "commodity" not in schema:
+                if buy == 0 and sell == 0:
                     continue
 
-                msg = json_data["message"]
-                system = msg.get("systemName")
-                station = msg.get("stationName")
-                station_type = msg.get("stationType", "Unknown")
-                commodities = msg.get("commodities", [])
+                if name not in markets:
+                    markets[name] = []
 
-                for c in commodities:
-                    name = c.get("name", "").lower()
-                    buy = c.get("buyPrice", 0)
-                    sell = c.get("sellPrice", 0)
-                    stock = c.get("stock", 0)
-                    demand = c.get("demand", 0)
-                    timestamp = datetime.now(timezone.utc)
-
-                    if buy == 0 and sell == 0:
-                        continue
-
-                    if name not in markets:
-                        markets[name] = []
-
-                    updated = False
-                    for entry in markets[name]:
-                        if entry["station"] == station and entry["system"] == system:
-                            entry.update({
-                                "stationType": station_type,
-                                "buy": buy,
-                                "sell": sell,
-                                "stock": stock,
-                                "demand": demand,
-                                "updated": timestamp
-                            })
-                            updated = True
-                            break
-
-                    if not updated:
-                        markets[name].append({
-                            "station": station,
-                            "system": system,
+                updated = False
+                for entry in markets[name]:
+                    if entry["station"] == station and entry["system"] == system:
+                        entry.update({
                             "stationType": station_type,
                             "buy": buy,
                             "sell": sell,
@@ -281,53 +260,63 @@ def start_eddn_listener():
                             "demand": demand,
                             "updated": timestamp
                         })
+                        updated = True
+                        break
+                if not updated:
+                    markets[name].append({
+                        "station": station,
+                        "system": system,
+                        "stationType": station_type,
+                        "buy": buy,
+                        "sell": sell,
+                        "stock": stock,
+                        "demand": demand,
+                        "updated": timestamp
+                    })
 
-                    for entry in markets[name]:
-                        if entry["station"] == station and entry["system"] == system:
-                            continue
+                for entry in markets[name]:
+                    if entry["station"] == station and entry["system"] == system:
+                        continue
 
-                        profit_buy = entry["sell"] - buy
-                        profit_sell = sell - entry["buy"]
+                    profit_buy = entry["sell"] - buy
+                    profit_sell = sell - entry["buy"]
+                    key_buy = f"{name}|{station}|{entry['station']}"
+                    key_sell = f"{name}|{entry['station']}|{station}"
 
-                        key_buy = f"{name}|{station}|{entry['station']}"
-                        key_sell = f"{name}|{entry['station']}|{station}"
+                    if (profit_buy > PROFIT_THRESHOLD and stock > SUPPLY_THRESHOLD and
+                        entry["demand"] > DEMAND_THRESHOLD and key_buy not in sent_alerts):
+                        send_alert(station, system, station_type, entry["station"], entry["system"],
+                                   entry["stationType"], name, buy, entry["sell"], profit_buy,
+                                   stock, entry["demand"], timestamp)
+                        sent_alerts.add(key_buy)
+                        alert_timestamps[key_buy] = time()
 
-                        if (profit_buy > PROFIT_THRESHOLD and
-                            stock > SUPPLY_THRESHOLD and
-                            entry["demand"] > DEMAND_THRESHOLD and
-                            key_buy not in sent_alerts):
-                            send_alert(
-                                buy_station=station, buy_system=system, buy_type=station_type,
-                                sell_station=entry["station"], sell_system=entry["system"], sell_type=entry["stationType"],
-                                commodity=name, buy_price=buy, sell_price=entry["sell"], profit=profit_buy,
-                                supply=stock, demand=entry["demand"], last_update=timestamp
-                            )
-                            sent_alerts.add(key_buy)
-                            alert_timestamps[key_buy] = time()
+                    if (profit_sell > PROFIT_THRESHOLD and entry["stock"] > SUPPLY_THRESHOLD and
+                        demand > DEMAND_THRESHOLD and key_sell not in sent_alerts):
+                        send_alert(entry["station"], entry["system"], entry["stationType"],
+                                   station, system, station_type, name, entry["buy"], sell,
+                                   profit_sell, entry["stock"], demand, timestamp)
+                        sent_alerts.add(key_sell)
+                        alert_timestamps[key_sell] = time()
 
-                        if (profit_sell > PROFIT_THRESHOLD and
-                            entry["stock"] > SUPPLY_THRESHOLD and
-                            demand > DEMAND_THRESHOLD and
-                            key_sell not in sent_alerts):
-                            send_alert(
-                                buy_station=entry["station"], buy_system=entry["system"], buy_type=entry["stationType"],
-                                sell_station=station, sell_system=system, sell_type=station_type,
-                                commodity=name, buy_price=entry["buy"], sell_price=sell, profit=profit_sell,
-                                supply=entry["stock"], demand=demand, last_update=timestamp
-                            )
-                            sent_alerts.add(key_sell)
-                            alert_timestamps[key_sell] = time()
+        print("✅ Polling cycle complete.\n")
 
-            print("✅ Polling cycle complete. Sleeping 15s...\n")
-            sleep(POLL_INTERVAL)
+    except Exception as e:
+        print(f"⚠️ HTTPS listener crashed: {e}")
 
-        except Exception as e:
-            print(f"⚠️ HTTPS listener crashed: {e}. Restarting in 15s...")
-            sleep(POLL_INTERVAL)
 
-# === MAIN ENTRY ===
+# === Flask & Scheduler ===
+app = Flask(__name__)
+
+@app.route("/")
+def home():
+    return "✅ EDDN Trading Alerts is running and polling every 15 seconds!"
+
+scheduler = BackgroundScheduler(daemon=True)
+scheduler.add_job(start_eddn_listener, "interval", seconds=15)
+scheduler.start()
+
+
 if __name__ == "__main__":
-    t = threading.Thread(target=start_eddn_listener, daemon=True)
-    t.start()
-    print("✅ Background listener started (Render-safe).")
-    app.run(host="0.0.0.0", port=10000, debug=False, use_reloader=False)
+    print("✅ Starting EDDN Trading Alerts (Render-safe polling mode)...")
+    app.run(host="0.0.0.0", port=10000)
