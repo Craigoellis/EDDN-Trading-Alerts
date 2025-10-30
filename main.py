@@ -315,6 +315,7 @@ def home():
 scheduler = BackgroundScheduler(daemon=True)
 scheduler.add_job(start_eddn_listener, "interval", seconds=15)
 scheduler.start()
+print("✅ Scheduler started successfully — polling every 15 seconds.")
 
 
 if __name__ == "__main__":
