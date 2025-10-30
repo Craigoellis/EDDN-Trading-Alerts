@@ -214,17 +214,23 @@ def send_alert(buy_station, buy_system, buy_type,
 # === HTTPS polling fallback listener ===
 def start_eddn_listener():
     print("🛰️ HTTPS polling mode active — listening for trades every 15s...")
-    last_seen = None
 
     while True:
         try:
-            # Pull a sample from an EDDN mirror (example mirror API)
-            r = requests.get("https://eddbapi-python.vercel.app/eddn/latest", timeout=10)
+            r = requests.get("https://eddbapi-python.vercel.app/eddn/latest", timeout=20)
             if r.status_code != 200:
+                print(f"⚠️ Data source error: {r.status_code}")
                 sleep(POLL_INTERVAL)
                 continue
 
             data = r.json()
+            if not data:
+                print("⚠️ No trade data returned, retrying...")
+                sleep(POLL_INTERVAL)
+                continue
+
+            print(f"📦 Retrieved {len(data)} messages... scanning for trades...")
+
             for json_data in data:
                 schema = json_data.get("$schemaRef", "")
                 if "commodity" not in schema:
@@ -263,6 +269,7 @@ def start_eddn_listener():
                             })
                             updated = True
                             break
+
                     if not updated:
                         markets[name].append({
                             "station": station,
@@ -311,12 +318,12 @@ def start_eddn_listener():
                             sent_alerts.add(key_sell)
                             alert_timestamps[key_sell] = time()
 
+            print("✅ Polling cycle complete. Sleeping 15s...\n")
             sleep(POLL_INTERVAL)
 
         except Exception as e:
-            print(f"⚠️ HTTPS listener error: {e}")
+            print(f"⚠️ HTTPS listener crashed: {e}. Restarting in 15s...")
             sleep(POLL_INTERVAL)
-
 
 # === MAIN ENTRY ===
 if __name__ == "__main__":
