@@ -413,11 +413,13 @@ class TradeService:
         origin_distance_cache = {}
         required_pad_size = filters["landing_pad_size"]
         max_station_distance_ls = filters["max_station_distance_ls"]
-        max_distance_ly = filters["max_distance_ly"]
+        max_origin_distance_ly = filters["max_origin_distance_ly"]
+        max_route_distance_ly = filters["max_route_distance_ly"]
         profit_min = filters["profit_min"]
         supply_min = filters["supply_min"]
         demand_min = filters["demand_min"]
         origin_system = filters["distance_origin_system"]
+        fleet_carrier_mode = filters["fleet_carrier_mode"]
 
         for commodity_name, entries in markets.items():
             source_entries = [
@@ -444,7 +446,7 @@ class TradeService:
                         source_entry["system"],
                     )
                 distance_from_origin_ly = origin_distance_cache[origin_distance_key]
-                if distance_from_origin_ly is None or distance_from_origin_ly > max_distance_ly:
+                if distance_from_origin_ly is None or distance_from_origin_ly > max_origin_distance_ly:
                     continue
 
                 source_context = self._get_station_context(source_entry, station_context_cache)
@@ -481,6 +483,13 @@ class TradeService:
                         )
                     distance_ly = route_distance_cache[distance_cache_key]
                     if distance_ly is None:
+                        continue
+                    if distance_ly > max_route_distance_ly:
+                        continue
+                    if not self._matches_trade_fleet_carrier_mode(
+                        station_type=destination_context["station_type"],
+                        fleet_carrier_mode=fleet_carrier_mode,
+                    ):
                         continue
 
                     opportunity = self._build_trade_opportunity(
@@ -667,9 +676,14 @@ class TradeService:
         filters["profit_min"] = self._coerce_int(params.get("profit_min"), filters["profit_min"], minimum=0)
         filters["supply_min"] = self._coerce_int(params.get("supply_min"), filters["supply_min"], minimum=0)
         filters["demand_min"] = self._coerce_int(params.get("demand_min"), filters["demand_min"], minimum=0)
-        filters["max_distance_ly"] = self._coerce_float(
-            params.get("max_distance_ly"),
-            filters["max_distance_ly"],
+        filters["max_origin_distance_ly"] = self._coerce_float(
+            params.get("max_origin_distance_ly"),
+            filters["max_origin_distance_ly"],
+            minimum=0,
+        )
+        filters["max_route_distance_ly"] = self._coerce_float(
+            params.get("max_route_distance_ly"),
+            filters["max_route_distance_ly"],
             minimum=0,
         )
         distance_origin_system = str(
@@ -686,6 +700,11 @@ class TradeService:
         if landing_pad_size not in {"Any", "Small", "Medium", "Large"}:
             landing_pad_size = filters["landing_pad_size"]
         filters["landing_pad_size"] = landing_pad_size
+        filters["fleet_carrier_mode"] = str(
+            params.get("fleet_carrier_mode", filters.get("fleet_carrier_mode", "include"))
+        ).lower()
+        if filters["fleet_carrier_mode"] not in {"exclude", "only", "include"}:
+            filters["fleet_carrier_mode"] = "include"
         return filters
 
     def _build_trade_opportunity(
@@ -791,7 +810,9 @@ class TradeService:
             return False
         if opportunity["demand"] < filters["demand_min"]:
             return False
-        if opportunity["distance_from_origin_ly"] > filters["max_distance_ly"]:
+        if opportunity["distance_from_origin_ly"] > filters["max_origin_distance_ly"]:
+            return False
+        if opportunity["distance_ly"] > filters["max_route_distance_ly"]:
             return False
         if opportunity["buy_station_distance_ls"] is not None and opportunity["buy_station_distance_ls"] > filters["max_station_distance_ls"]:
             return False
@@ -833,15 +854,27 @@ class TradeService:
         return True
 
     @staticmethod
+    def _matches_trade_fleet_carrier_mode(*, station_type: str, fleet_carrier_mode: str) -> bool:
+        station_type_normalized = station_type.lower()
+        is_fleet_carrier = "fleet carrier" in station_type_normalized
+        if fleet_carrier_mode == "exclude" and is_fleet_carrier:
+            return False
+        if fleet_carrier_mode == "only" and not is_fleet_carrier:
+            return False
+        return True
+
+    @staticmethod
     def _filter_record_to_trade_filters(filter_record: dict) -> dict:
         return {
             "profit_min": filter_record["profit_min"],
             "supply_min": filter_record["supply_min"],
             "demand_min": filter_record["demand_min"],
-            "max_distance_ly": filter_record["max_distance_ly"],
+            "max_origin_distance_ly": filter_record["max_origin_distance_ly"],
+            "max_route_distance_ly": filter_record["max_route_distance_ly"],
             "distance_origin_system": filter_record.get("distance_origin_system") or "Sol",
             "max_station_distance_ls": filter_record["max_station_distance_ls"],
             "landing_pad_size": filter_record["landing_pad_size"],
+            "fleet_carrier_mode": filter_record.get("fleet_carrier_mode") or "include",
         }
 
     @staticmethod

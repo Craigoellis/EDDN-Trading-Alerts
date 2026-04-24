@@ -90,7 +90,8 @@ class UserRepository:
                 "profit_min": filter_data["profit_min"],
                 "supply_min": filter_data["supply_min"],
                 "demand_min": filter_data["demand_min"],
-                "max_distance_ly": filter_data["max_distance_ly"],
+                "max_origin_distance_ly": filter_data["max_origin_distance_ly"],
+                "max_route_distance_ly": filter_data["max_route_distance_ly"],
                 "distance_origin_system": filter_data.get("distance_origin_system", "Sol"),
                 "max_station_distance_ls": filter_data["max_station_distance_ls"],
                 "landing_pad_size": filter_data["landing_pad_size"],
@@ -315,6 +316,10 @@ class UserRepository:
     def _normalize_filter_record(filter_record: dict) -> dict:
         normalized = dict(filter_record)
         normalized["distance_origin_system"] = normalized.get("distance_origin_system") or "Sol"
+        legacy_distance = normalized.get("max_distance_ly", 120)
+        normalized["max_origin_distance_ly"] = normalized.get("max_origin_distance_ly", legacy_distance)
+        normalized["max_route_distance_ly"] = normalized.get("max_route_distance_ly", legacy_distance)
+        normalized["fleet_carrier_mode"] = normalized.get("fleet_carrier_mode") or "include"
         return normalized
 
     @staticmethod

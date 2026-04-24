@@ -69,8 +69,12 @@
                     </div>
                 </label>
                 <label>
-                    <span>Max Distance From Origin (LY)</span>
-                    <input type="number" name="max_distance_ly" min="0" step="1" value="120">
+                    <span>Max Distance From Origin To Buy System (LY)</span>
+                    <input type="number" name="max_origin_distance_ly" min="0" step="1" value="120">
+                </label>
+                <label>
+                    <span>Max Distance Between Buy And Sell Systems (LY)</span>
+                    <input type="number" name="max_route_distance_ly" min="0" step="1" value="120">
                 </label>
                 <label>
                     <span>Max Station Distance (Ls)</span>
@@ -122,7 +126,9 @@
                             <th>Supply</th>
                             <th>Demand</th>
                             <th>Origin</th>
-                            <th>Distance</th>
+                            <th>Origin Distance</th>
+                            <th>Route Distance</th>
+                            <th>Carriers</th>
                             <th>Pad</th>
                             <th>Enabled</th>
                             <th>Actions</th>
@@ -137,7 +143,9 @@
                                     <td>{{ "{:,}".format(filter_row.supply_min) }}</td>
                                     <td>{{ "{:,}".format(filter_row.demand_min) }}</td>
                                     <td>{{ filter_row.distance_origin_system }}</td>
-                                    <td>{{ filter_row.max_distance_ly }} LY</td>
+                                    <td>{{ filter_row.max_origin_distance_ly }} LY</td>
+                                    <td>{{ filter_row.max_route_distance_ly }} LY</td>
+                                    <td>{{ filter_row.fleet_carrier_mode|title }}</td>
                                     <td>{{ filter_row.landing_pad_size }}</td>
                                     <td>
                                         <span class="status-badge {{ 'status-badge--active' if filter_row.is_enabled else 'status-badge--paused' }}">
@@ -159,7 +167,7 @@
                             {% endfor %}
                         {% else %}
                             <tr>
-                                <td colspan="9" class="empty-table-cell">No alert filters saved yet.</td>
+                                <td colspan="11" class="empty-table-cell">No alert filters saved yet.</td>
                             </tr>
                         {% endif %}
                     </tbody>

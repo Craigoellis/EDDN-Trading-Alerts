@@ -34,7 +34,7 @@
             <section class="filters-panel">
                 <div class="panel-heading">
                     <h2>Trade Filters</h2>
-                    <p>Refine the live route feed with profitability, origin distance, and station constraints.</p>
+                    <p>Refine the live route feed with profitability, origin distance, route distance, station constraints, and fleet carrier handling.</p>
                 </div>
 
                 <form id="filters-form" class="filters-form">
@@ -65,8 +65,12 @@
                         </div>
                     </label>
                     <label>
-                        <span>Max Distance From Origin (LY)</span>
-                        <input type="number" name="max_distance_ly" min="0" step="1" value="{{ initial_data.filters.max_distance_ly }}">
+                        <span>Max Distance From Origin To Buy System (LY)</span>
+                        <input type="number" name="max_origin_distance_ly" min="0" step="1" value="{{ initial_data.filters.max_origin_distance_ly }}">
+                    </label>
+                    <label>
+                        <span>Max Distance Between Buy And Sell Systems (LY)</span>
+                        <input type="number" name="max_route_distance_ly" min="0" step="1" value="{{ initial_data.filters.max_route_distance_ly }}">
                     </label>
                     <label>
                         <span>Max Station Distance (Ls)</span>
@@ -78,6 +82,14 @@
                             {% for option in ["Any", "Small", "Medium", "Large"] %}
                                 <option value="{{ option }}" {% if initial_data.filters.landing_pad_size == option %}selected{% endif %}>{{ option }}</option>
                             {% endfor %}
+                        </select>
+                    </label>
+                    <label>
+                        <span>Fleet Carriers</span>
+                        <select name="fleet_carrier_mode">
+                            <option value="exclude" {% if initial_data.filters.fleet_carrier_mode == 'exclude' %}selected{% endif %}>Exclude Fleet Carriers</option>
+                            <option value="include" {% if initial_data.filters.fleet_carrier_mode == 'include' %}selected{% endif %}>Include Fleet Carriers</option>
+                            <option value="only" {% if initial_data.filters.fleet_carrier_mode == 'only' %}selected{% endif %}>Only Fleet Carriers</option>
                         </select>
                     </label>
 

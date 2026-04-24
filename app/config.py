@@ -26,8 +26,10 @@ class AppConfig:
             "profit_min": int(os.getenv("PROFIT_THRESHOLD", "40000")),
             "supply_min": int(os.getenv("SUPPLY_THRESHOLD", "5000")),
             "demand_min": int(os.getenv("DEMAND_THRESHOLD", "5000")),
-            "max_distance_ly": float(os.getenv("MAX_DISTANCE_LY", "120")),
+            "max_origin_distance_ly": float(os.getenv("MAX_ORIGIN_DISTANCE_LY", os.getenv("MAX_DISTANCE_LY", "120"))),
+            "max_route_distance_ly": float(os.getenv("MAX_ROUTE_DISTANCE_LY", os.getenv("MAX_DISTANCE_LY", "120"))),
             "distance_origin_system": os.getenv("DISTANCE_ORIGIN_SYSTEM", "Sol"),
             "landing_pad_size": os.getenv("LANDING_PAD_SIZE", "Any"),
+            "fleet_carrier_mode": os.getenv("FLEET_CARRIER_MODE", "include").lower(),
             "max_station_distance_ls": int(os.getenv("MAX_STATION_DISTANCE_LS", "20000")),
         }

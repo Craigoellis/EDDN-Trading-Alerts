@@ -150,7 +150,6 @@ def create_account_filter():
     user_repository = current_app.extensions["user_repository"]
     trade_service = current_app.extensions["trade_service"]
     filter_payload = trade_service.parse_filters(request.form.to_dict())
-    station_browser_filters = trade_service.parse_station_browser_filters(request.form.to_dict())
 
     name = request.form.get("name", "").strip() or "My Alert Filter"
     created_filter = user_repository.create_filter(
@@ -160,11 +159,12 @@ def create_account_filter():
             "profit_min": filter_payload["profit_min"],
             "supply_min": filter_payload["supply_min"],
             "demand_min": filter_payload["demand_min"],
-            "max_distance_ly": filter_payload["max_distance_ly"],
+            "max_origin_distance_ly": filter_payload["max_origin_distance_ly"],
+            "max_route_distance_ly": filter_payload["max_route_distance_ly"],
             "distance_origin_system": filter_payload["distance_origin_system"],
             "max_station_distance_ls": filter_payload["max_station_distance_ls"],
             "landing_pad_size": filter_payload["landing_pad_size"],
-            "fleet_carrier_mode": station_browser_filters["fleet_carrier_mode"],
+            "fleet_carrier_mode": filter_payload["fleet_carrier_mode"],
             "is_enabled": request.form.get("is_enabled", "on") == "on",
         },
     )
