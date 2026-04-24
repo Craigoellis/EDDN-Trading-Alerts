@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Profile | EDDN Trade Intelligence{% endblock %}
+{% block content %}
+    <header class="station-hero">
+        <div class="hero-copy">
+            <p class="eyebrow">Profile</p>
+            <h1 class="station-title">Personal settings for alerts.</h1>
+            <p class="hero-text">
+                Update the timezone used in Telegram timestamps and manage your Telegram setup in one place.
+            </p>
+            <div class="hero-actions">
+                <a class="pill-link" href="{{ url_for('web.alerts') }}">Back To Alerts</a>
+                <a class="ghost-link" href="{{ url_for('web.dashboard') }}">Trade Filter</a>
+            </div>
+        </div>
+        <div class="hero-stats">
+            <article class="stat-card">
+                <span>Username</span>
+                <strong>{{ profile_data.user.username }}</strong>
+            </article>
+            <article class="stat-card">
+                <span>Timezone</span>
+                <strong>{{ profile_data.user.timezone }}</strong>
+            </article>
+            <article class="stat-card">
+                <span>Telegram</span>
+                <strong>{{ profile_data.user.telegram_contact or "Not set" }}</strong>
+            </article>
+        </div>
+    </header>
+
+    <main class="dashboard-grid">
+        <section class="filters-panel">
+            <div class="panel-heading">
+                <div>
+                    <h2>Profile Settings</h2>
+                    <p>These settings are used across your account and Telegram alerts.</p>
+                </div>
+            </div>
+            <form class="filters-form" method="post">
+                <label>
+                    <span>Email</span>
+                    <input type="email" value="{{ profile_data.user.email }}" disabled>
+                </label>
+                <label>
+                    <span>Telegram Handle / Contact</span>
+                    <input type="text" name="telegram_contact" value="{{ profile_data.user.telegram_contact or '' }}" placeholder="@yourhandle or note">
+                </label>
+                <label>
+                    <span>Timezone</span>
+                    <input type="search" name="timezone" list="timezone-options" value="{{ profile_data.user.timezone }}" autocomplete="off" required>
+                    <datalist id="timezone-options">
+                        {% for timezone_name in profile_data.timezone_options %}
+                            <option value="{{ timezone_name }}"></option>
+                        {% endfor %}
+                    </datalist>
+                </label>
+                <div class="form-actions">
+                    <button type="submit">Save Settings</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="results-panel">
+            <div class="panel-heading">
+                <div>
+                    <h2>Telegram Linking</h2>
+                    <p>Connect your Telegram chat and control how alert timestamps are shown.</p>
+                </div>
+            </div>
+            <div class="account-card-stack">
+                <article class="account-card">
+                    <span class="account-label">Status</span>
+                    <strong>{{ "Linked" if profile_data.user.telegram_verified else "Waiting for bot confirmation" }}</strong>
+                    <p>
+                        {% if profile_data.user.telegram_verified %}
+                            Your Telegram chat is linked and ready to receive alerts.
+                        {% else %}
+                            Open the bot link below or send `/start {{ profile_data.active_link.code if profile_data.active_link else '' }}` to your bot.
+                        {% endif %}
+                    </p>
+                </article>
+                {% if not profile_data.user.telegram_verified and profile_data.active_link %}
+                    <article class="account-card">
+                        <span class="account-label">Connect Code</span>
+                        <strong>{{ profile_data.active_link.code }}</strong>
+                        <p>Use this once in Telegram to link the correct chat to your account.</p>
+                        <div class="detail-actions">
+                            {% if profile_data.telegram_link %}
+                                <a class="pill-link" href="{{ profile_data.telegram_link }}" target="_blank" rel="noreferrer">Open Telegram Bot</a>
+                            {% endif %}
+                            <form method="post" action="{{ url_for('web.refresh_telegram_link') }}">
+                                <button type="submit" class="ghost-button">Refresh Link Code</button>
+                            </form>
+                        </div>
+                    </article>
+                {% endif %}
+                <article class="account-card">
+                    <span class="account-label">Current Zone</span>
+                    <strong>{{ profile_data.user.timezone }}</strong>
+                    <p>Examples: `Europe/London`, `America/New_York`, `Australia/Sydney`.</p>
+                </article>
+                <article class="account-card">
+                    <span class="account-label">Telegram Timestamps</span>
+                    <strong>Localized automatically</strong>
+                    <p>Buy update, sell update, and overall alert update times will all follow your saved timezone.</p>
+                </article>
+            </div>
+        </section>
+    </main>
+{% endblock %}

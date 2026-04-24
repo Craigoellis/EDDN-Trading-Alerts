@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Create Account | EDDN Trade Intelligence{% endblock %}
+{% block content %}
+    <section class="auth-shell">
+        <article class="auth-panel auth-panel-wide">
+            <p class="eyebrow">Create Account</p>
+            <h1 class="auth-title">Set up personalized Telegram trade alerts.</h1>
+            <p class="hero-text">Create your account, save alert filters, and link your Telegram chat to receive direct messages.</p>
+            <form class="filters-form auth-form auth-grid" method="post">
+                <label>
+                    <span>Username</span>
+                    <input type="text" name="username" required>
+                </label>
+                <label>
+                    <span>Email</span>
+                    <input type="email" name="email" required>
+                </label>
+                <label>
+                    <span>Password</span>
+                    <input type="password" name="password" minlength="8" required>
+                </label>
+                <label>
+                    <span>Telegram ID / Handle</span>
+                    <input type="text" name="telegram_contact" placeholder="@yourhandle or known chat id">
+                </label>
+                <input type="hidden" name="timezone" id="signup-timezone" value="UTC">
+                <div class="form-actions auth-actions">
+                    <button type="submit">Create Account</button>
+                    <a class="ghost-link" href="{{ url_for('web.sign_in') }}">Already have an account?</a>
+                </div>
+            </form>
+        </article>
+    </section>
+{% endblock %}
+{% block scripts %}
+    <script>
+        const signupTimezoneField = document.getElementById("signup-timezone");
+        if (signupTimezoneField && window.Intl?.DateTimeFormat) {
+            signupTimezoneField.value = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+        }
+    </script>
+{% endblock %}

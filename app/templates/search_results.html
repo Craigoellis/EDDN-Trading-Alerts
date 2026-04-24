@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Search | EDDN Trade Intelligence{% endblock %}
+{% block content %}
+        <header class="station-hero">
+            <div class="hero-copy">
+                <p class="eyebrow">Search</p>
+                <h1 class="station-title">Results for "{{ search_data.query }}"</h1>
+                <p class="hero-text">Jump straight to stations, systems, and commodities in the tracked market feed.</p>
+                <div class="hero-actions">
+                    <a class="pill-link" href="{{ url_for('web.stations_browser') }}">Browse Stations</a>
+                </div>
+            </div>
+            <div class="panel-toolbar panel-toolbar--end">
+                <a class="ghost-link" href="{{ url_for('web.dashboard') }}">Back to dashboard</a>
+            </div>
+        </header>
+
+        <section class="search-grid">
+            <article class="filters-panel">
+                <div class="panel-heading">
+                    <h2>Stations</h2>
+                    <p>Matching live stations.</p>
+                </div>
+                <div class="search-list">
+                    {% if search_data.stations %}
+                        {% for item in search_data.stations %}
+                            <a class="search-item" href="{{ url_for('web.station_detail', system=item.system, station=item.station_name) }}">{{ item.station_name }}<span>{{ item.system }}</span></a>
+                        {% endfor %}
+                    {% else %}
+                        <p class="search-empty">No station matches.</p>
+                    {% endif %}
+                </div>
+            </article>
+
+            <article class="filters-panel">
+                <div class="panel-heading">
+                    <h2>Systems</h2>
+                    <p>Matching tracked systems.</p>
+                </div>
+                <div class="search-list">
+                    {% if search_data.systems %}
+                        {% for item in search_data.systems %}
+                            <a class="search-item" href="{{ url_for('web.system_detail', system=item.name) }}">{{ item.name }}</a>
+                        {% endfor %}
+                    {% else %}
+                        <p class="search-empty">No system matches.</p>
+                    {% endif %}
+                </div>
+            </article>
+
+            <article class="filters-panel">
+                <div class="panel-heading">
+                    <h2>Commodities</h2>
+                    <p>Matching commodity names.</p>
+                </div>
+                <div class="search-list">
+                    {% if search_data.commodities %}
+                        {% for item in search_data.commodities %}
+                            <a class="search-item" href="{{ url_for('web.commodity_detail', commodity=item.name) }}">{{ item.display_name }}</a>
+                        {% endfor %}
+                    {% else %}
+                        <p class="search-empty">No commodity matches.</p>
+                    {% endif %}
+                </div>
+            </article>
+        </section>
+{% endblock %}

@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Trade Filter | EDDN Trade Intelligence{% endblock %}
+{% block content %}
+        <header class="hero">
+            <div class="hero-copy">
+                <p class="eyebrow">EDDN Trading Alerts</p>
+                <h1>Trade intelligence with live, customizable route filters.</h1>
+                <p class="hero-text">
+                    Tune profitability, travel distance, supply, demand, station arrival distance, and pad access
+                    without changing backend logic.
+                </p>
+                <div class="hero-actions">
+                    <a class="pill-link" href="{{ url_for('web.stations_browser') }}">Browse Stations</a>
+                    <a class="ghost-link" href="{{ url_for('web.search', query='') }}">Open Search</a>
+                </div>
+            </div>
+            <div class="hero-stats">
+                <article class="stat-card">
+                    <span>Best Profit</span>
+                    <strong id="best-profit">{{ "{:,}".format(initial_data.summary.best_profit_per_ton) }} Cr/t</strong>
+                </article>
+                <article class="stat-card">
+                    <span>Live Opportunities</span>
+                    <strong id="opportunity-count">{{ initial_data.summary.opportunity_count }}</strong>
+                </article>
+                <article class="stat-card">
+                    <span>Shortest Route</span>
+                    <strong id="shortest-route">{{ "%.2f"|format(initial_data.summary.shortest_route_ly) }} LY</strong>
+                </article>
+            </div>
+        </header>
+
+        <main class="dashboard-grid">
+            <section class="filters-panel">
+                <div class="panel-heading">
+                    <h2>Trade Filters</h2>
+                    <p>Refine the live route feed with profitability, origin distance, and station constraints.</p>
+                </div>
+
+                <form id="filters-form" class="filters-form">
+                    <label>
+                        <span>Minimum Profit</span>
+                        <input type="number" name="profit_min" min="0" step="1000" value="{{ initial_data.filters.profit_min }}">
+                    </label>
+                    <label>
+                        <span>Minimum Supply</span>
+                        <input type="number" name="supply_min" min="0" step="500" value="{{ initial_data.filters.supply_min }}">
+                    </label>
+                    <label>
+                        <span>Minimum Demand</span>
+                        <input type="number" name="demand_min" min="0" step="500" value="{{ initial_data.filters.demand_min }}">
+                    </label>
+                    <label>
+                        <span>Distance From</span>
+                        <div class="suggest-field">
+                            <input
+                                type="search"
+                                name="distance_origin_system"
+                                value="{{ initial_data.filters.distance_origin_system }}"
+                                placeholder="Start typing a system"
+                                autocomplete="off"
+                                data-system-suggest
+                            >
+                            <div class="suggest-dropdown" data-system-suggest-list hidden></div>
+                        </div>
+                    </label>
+                    <label>
+                        <span>Max Distance From Origin (LY)</span>
+                        <input type="number" name="max_distance_ly" min="0" step="1" value="{{ initial_data.filters.max_distance_ly }}">
+                    </label>
+                    <label>
+                        <span>Max Station Distance (Ls)</span>
+                        <input type="number" name="max_station_distance_ls" min="0" step="1000" value="{{ initial_data.filters.max_station_distance_ls }}">
+                    </label>
+                    <label>
+                        <span>Landing Pad Size</span>
+                        <select name="landing_pad_size">
+                            {% for option in ["Any", "Small", "Medium", "Large"] %}
+                                <option value="{{ option }}" {% if initial_data.filters.landing_pad_size == option %}selected{% endif %}>{{ option }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+
+                    <div class="form-actions">
+                        <button type="submit">Apply Filters</button>
+                        <button type="button" class="ghost-button" id="reset-filters">Reset</button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="results-panel">
+                <div class="panel-heading">
+                    <h2>Live Opportunities</h2>
+                    <p id="last-refresh">Waiting for refresh data...</p>
+                </div>
+
+                <div id="results-table" class="results-table"></div>
+                <div id="empty-state" class="empty-state" hidden>
+                    <h3>No opportunities match the current filters.</h3>
+                    <p>Try lowering the minimum profit or widening the route distance.</p>
+                </div>
+            </section>
+        </main>
+{% endblock %}
+{% block scripts %}
+    <script>
+        window.__INITIAL_TRADE_DATA__ = {{ initial_data | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='js/system_picker.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+{% endblock %}

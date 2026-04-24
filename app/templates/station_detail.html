@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}{{ station_data.station.name }} | Station Market{% endblock %}
+{% block content %}
+        <header class="station-hero">
+            <div class="hero-copy">
+                <p class="eyebrow">Station Market</p>
+                <h1 class="station-title">{{ station_data.station.name }}</h1>
+                <p class="hero-text"><a class="station-link" href="{{ url_for('web.system_detail', system=station_data.station.system) }}">{{ station_data.station.system }}</a> | {{ station_data.station.type }} | Pad {{ station_data.station.pad_size }}</p>
+                <div class="hero-actions">
+                    <a class="pill-link" href="{{ url_for('web.stations_browser') }}">All Stations</a>
+                    <a class="ghost-link" href="{{ url_for('web.dashboard') }}">Trade Filter</a>
+                </div>
+            </div>
+            <div class="hero-stats">
+                <article class="stat-card">
+                    <span>Tracked Commodities</span>
+                    <strong>{{ station_data.station.commodity_count }}</strong>
+                </article>
+                <article class="stat-card">
+                    <span>Arrival Distance</span>
+                    <strong>{% if station_data.station.arrival_distance_ls is not none %}{{ "{:,}".format(station_data.station.arrival_distance_ls) }} Ls{% else %}Unknown{% endif %}</strong>
+                </article>
+                <article class="stat-card">
+                    <span>Last Listener Update</span>
+                    <strong id="station-last-refresh">Waiting...</strong>
+                </article>
+            </div>
+        </header>
+
+        <section class="markets-panel">
+            <div class="panel-heading">
+                <h2>Commodity Book</h2>
+                <p>Live buy and sell values currently held on disk for this station.</p>
+            </div>
+            <div class="panel-toolbar">
+                <form class="inline-sort-form" id="station-sort-form">
+                    <select name="sort_by">
+                        <option value="commodity" {% if station_data.sorting.sort_by == 'commodity' %}selected{% endif %}>Commodity</option>
+                        <option value="buy" {% if station_data.sorting.sort_by == 'buy' %}selected{% endif %}>Buy</option>
+                        <option value="sell" {% if station_data.sorting.sort_by == 'sell' %}selected{% endif %}>Sell</option>
+                        <option value="supply" {% if station_data.sorting.sort_by == 'supply' %}selected{% endif %}>Supply</option>
+                        <option value="demand" {% if station_data.sorting.sort_by == 'demand' %}selected{% endif %}>Demand</option>
+                        <option value="updated" {% if station_data.sorting.sort_by == 'updated' %}selected{% endif %}>Updated</option>
+                    </select>
+                    <select name="sort_order">
+                        <option value="asc" {% if station_data.sorting.sort_order == 'asc' %}selected{% endif %}>Ascending</option>
+                        <option value="desc" {% if station_data.sorting.sort_order == 'desc' %}selected{% endif %}>Descending</option>
+                    </select>
+                </form>
+            </div>
+            <div class="market-table-wrap">
+                <table class="market-table">
+                    <thead>
+                        <tr>
+                            <th>Commodity</th>
+                            <th>Buy</th>
+                            <th>Sell</th>
+                            <th>Supply</th>
+                            <th>Demand</th>
+                            <th>Updated</th>
+                        </tr>
+                    </thead>
+                    <tbody id="station-commodity-body"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="markets-panel">
+            <div class="panel-heading">
+                <h2>Recent History</h2>
+                <p>Latest captured changes for this station.</p>
+            </div>
+            <div class="market-table-wrap">
+                <table class="market-table">
+                    <thead>
+                        <tr>
+                            <th>Commodity</th>
+                            <th>Buy</th>
+                            <th>Sell</th>
+                            <th>Supply</th>
+                            <th>Demand</th>
+                            <th>Updated</th>
+                        </tr>
+                    </thead>
+                    <tbody id="station-history-body"></tbody>
+                </table>
+            </div>
+        </section>
+{% endblock %}
+{% block scripts %}
+    <script>
+        window.__INITIAL_STATION_DATA__ = {{ station_data | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='js/station_detail.js') }}"></script>
+{% endblock %}

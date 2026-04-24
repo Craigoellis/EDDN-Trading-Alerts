@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Operations | EDDN Trade Intelligence{% endblock %}
+{% block content %}
+    <header class="station-hero">
+        <div class="hero-copy">
+            <p class="eyebrow">Operations</p>
+            <h1 class="station-title">Live server sizing view.</h1>
+            <p class="hero-text">
+                This hidden page tracks what the app is actually using right now so you can choose a sensible server size.
+            </p>
+        </div>
+        <div class="hero-stats">
+            <article class="stat-card">
+                <span>Process RAM</span>
+                <strong id="ops-working-set">{{ metrics_data.process.working_set_bytes }}</strong>
+            </article>
+            <article class="stat-card">
+                <span>CPU</span>
+                <strong id="ops-cpu">{{ metrics_data.process.cpu_percent }}%</strong>
+            </article>
+            <article class="stat-card">
+                <span>Project Footprint</span>
+                <strong id="ops-project">{{ metrics_data.storage.project_bytes }}</strong>
+            </article>
+        </div>
+    </header>
+
+    <main class="ops-grid">
+        <section class="results-panel">
+            <div class="panel-heading">
+                <div>
+                    <h2>Application Process</h2>
+                    <p>Live measurements for this Flask process.</p>
+                </div>
+            </div>
+            <div class="ops-card-grid">
+                <article class="account-card">
+                    <span class="account-label">PID</span>
+                    <strong id="ops-pid">{{ metrics_data.process.pid }}</strong>
+                </article>
+                <article class="account-card">
+                    <span class="account-label">Working Set</span>
+                    <strong id="ops-working-set-detail">{{ metrics_data.process.working_set_bytes }}</strong>
+                </article>
+                <article class="account-card">
+                    <span class="account-label">Private Memory</span>
+                    <strong id="ops-private">{{ metrics_data.process.private_bytes }}</strong>
+                </article>
+                <article class="account-card">
+                    <span class="account-label">CPU Usage</span>
+                    <strong id="ops-cpu-detail">{{ metrics_data.process.cpu_percent }}%</strong>
+                </article>
+                <article class="account-card">
+                    <span class="account-label">Uptime</span>
+                    <strong id="ops-uptime">{{ metrics_data.process.uptime_seconds }}</strong>
+                </article>
+            </div>
+        </section>
+
+        <section class="results-panel">
+            <div class="panel-heading">
+                <div>
+                    <h2>Server Capacity</h2>
+                    <p>Useful for deciding VM or host sizing.</p>
+                </div>
+            </div>
+            <div class="ops-card-grid">
+                <article class="account-card">
+                    <span class="account-label">CPU Cores</span>
+                    <strong id="ops-cpu-count">{{ metrics_data.system.cpu_count }}</strong>
+                </article>
+                <article class="account-card">
+                    <span class="account-label">Total RAM</span>
+                    <strong id="ops-total-memory">{{ metrics_data.system.total_memory_bytes }}</strong>
+                </article>
+                <article class="account-card">
+                    <span class="account-label">Available RAM</span>
+                    <strong id="ops-available-memory">{{ metrics_data.system.available_memory_bytes }}</strong>
+                </article>
+                <article class="account-card">
+                    <span class="account-label">Disk Used</span>
+                    <strong id="ops-disk-used">{{ metrics_data.storage.disk_used_bytes }}</strong>
+                </article>
+                <article class="account-card">
+                    <span class="account-label">Disk Free</span>
+                    <strong id="ops-disk-free">{{ metrics_data.storage.disk_free_bytes }}</strong>
+                </article>
+            </div>
+        </section>
+
+        <section class="results-panel">
+            <div class="panel-heading">
+                <div>
+                    <h2>Application Storage</h2>
+                    <p>What this project consumes on disk, separate from total machine storage.</p>
+                </div>
+            </div>
+            <div class="ops-card-grid">
+                <article class="account-card">
+                    <span class="account-label">Project Directory</span>
+                    <strong id="ops-project-dir">{{ metrics_data.storage.project_dir }}</strong>
+                </article>
+                <article class="account-card">
+                    <span class="account-label">Project Footprint</span>
+                    <strong id="ops-project-detail">{{ metrics_data.storage.project_bytes }}</strong>
+                </article>
+                <article class="account-card">
+                    <span class="account-label">Store Directory</span>
+                    <strong id="ops-storage-dir">{{ metrics_data.storage.storage_dir }}</strong>
+                </article>
+                <article class="account-card">
+                    <span class="account-label">Data Store Size</span>
+                    <strong id="ops-store-detail">{{ metrics_data.storage.app_store_bytes }}</strong>
+                </article>
+                <article class="account-card">
+                    <span class="account-label">Host Disk Total</span>
+                    <strong id="ops-disk-total">{{ metrics_data.storage.disk_total_bytes }}</strong>
+                </article>
+                <article class="account-card">
+                    <span class="account-label">Updated</span>
+                    <strong id="ops-updated-at">{{ metrics_data.captured_at_epoch }}</strong>
+                </article>
+            </div>
+        </section>
+    </main>
+{% endblock %}
+{% block scripts %}
+    <script>
+        window.__OPS_INITIAL_DATA__ = {{ metrics_data | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='js/ops_dashboard.js') }}"></script>
+{% endblock %}

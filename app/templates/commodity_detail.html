@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}{{ commodity_data.commodity.display_name }} | Commodity Market{% endblock %}
+{% block content %}
+        <header class="station-hero">
+            <div class="hero-copy">
+                <p class="eyebrow">Commodity Overview</p>
+                <h1 class="station-title">{{ commodity_data.commodity.display_name }}</h1>
+                <p class="hero-text">Current live listings and recent changes for this commodity across tracked stations.</p>
+                <div class="hero-actions">
+                    <a class="pill-link" href="{{ url_for('web.search', query=commodity_data.commodity.name) }}">Find Related</a>
+                </div>
+            </div>
+            <div class="hero-stats">
+                <article class="stat-card">
+                    <span>Listings</span>
+                    <strong>{{ commodity_data.commodity.listing_count }}</strong>
+                </article>
+                <article class="stat-card">
+                    <span>Best Sell</span>
+                    <strong>{{ "{:,}".format(commodity_data.commodity.best_sell_price) }} Cr</strong>
+                </article>
+                <article class="stat-card">
+                    <span>Lowest Buy</span>
+                    <strong>{{ "{:,}".format(commodity_data.commodity.lowest_buy_price) }} Cr</strong>
+                </article>
+            </div>
+        </header>
+
+        <section class="markets-panel">
+            <div class="panel-heading">
+                <h2>Live Listings</h2>
+                <p>Every current station entry we have for this commodity.</p>
+            </div>
+            <div class="panel-toolbar">
+                <a class="ghost-link" href="{{ url_for('web.dashboard') }}">Back to dashboard</a>
+            </div>
+            <div class="market-table-wrap">
+                <table class="market-table">
+                    <thead>
+                        <tr>
+                            <th>Station</th>
+                            <th>System</th>
+                            <th>Buy</th>
+                            <th>Sell</th>
+                            <th>Supply</th>
+                            <th>Demand</th>
+                            <th>Pad</th>
+                            <th>Arrival</th>
+                            <th>Updated</th>
+                        </tr>
+                    </thead>
+                    <tbody id="commodity-markets-body"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="markets-panel">
+            <div class="panel-heading">
+                <h2>Recent History</h2>
+                <p>Recent price and quantity updates captured for this commodity.</p>
+            </div>
+            <div class="market-table-wrap">
+                <table class="market-table">
+                    <thead>
+                        <tr>
+                            <th>Station</th>
+                            <th>System</th>
+                            <th>Buy</th>
+                            <th>Sell</th>
+                            <th>Supply</th>
+                            <th>Demand</th>
+                            <th>Updated</th>
+                        </tr>
+                    </thead>
+                    <tbody id="commodity-history-body"></tbody>
+                </table>
+            </div>
+        </section>
+{% endblock %}
+{% block scripts %}
+    <script>
+        window.__INITIAL_COMMODITY_DATA__ = {{ commodity_data | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='js/commodity_detail.js') }}"></script>
+{% endblock %}

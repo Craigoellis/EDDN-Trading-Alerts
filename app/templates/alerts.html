@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% block title %}Alerts | EDDN Trade Intelligence{% endblock %}
+{% block content %}
+    <header class="station-hero">
+        <div class="hero-copy">
+            <p class="eyebrow">Alerts</p>
+            <h1 class="station-title">Build and manage your personal trade rules.</h1>
+            <p class="hero-text">
+                Create Telegram alert filters, choose your origin system, and review every saved rule in one place.
+            </p>
+            <div class="hero-actions">
+                <a class="pill-link" href="{{ url_for('web.dashboard') }}">Trade Filter</a>
+                <a class="ghost-link" href="{{ url_for('web.profile') }}">Profile & Telegram</a>
+            </div>
+        </div>
+        <div class="hero-stats">
+            <article class="stat-card">
+                <span>Saved Filters</span>
+                <strong>{{ alerts_data.filters|length }}</strong>
+            </article>
+            <article class="stat-card">
+                <span>Telegram Status</span>
+                <strong>{{ "Linked" if alerts_data.user.telegram_verified else "Pending" }}</strong>
+            </article>
+            <article class="stat-card">
+                <span>Timezone</span>
+                <strong>{{ alerts_data.user.timezone }}</strong>
+            </article>
+        </div>
+    </header>
+
+    <main class="dashboard-grid">
+        <section class="filters-panel">
+            <div class="panel-heading">
+                <div>
+                    <h2>Create Alert Filter</h2>
+                    <p>Every enabled filter is evaluated in the background and can send direct Telegram alerts.</p>
+                </div>
+            </div>
+            <form class="filters-form" method="post" action="{{ url_for('web.create_account_filter') }}">
+                <label>
+                    <span>Filter Name</span>
+                    <input type="text" name="name" value="My Alert Filter" required>
+                </label>
+                <label>
+                    <span>Minimum Profit</span>
+                    <input type="number" name="profit_min" min="0" step="1000" value="40000">
+                </label>
+                <label>
+                    <span>Minimum Supply</span>
+                    <input type="number" name="supply_min" min="0" step="500" value="5000">
+                </label>
+                <label>
+                    <span>Minimum Demand</span>
+                    <input type="number" name="demand_min" min="0" step="500" value="5000">
+                </label>
+                <label>
+                    <span>Distance From</span>
+                    <div class="suggest-field">
+                        <input
+                            type="search"
+                            name="distance_origin_system"
+                            value="Sol"
+                            placeholder="Start typing a system"
+                            autocomplete="off"
+                            data-system-suggest
+                        >
+                        <div class="suggest-dropdown" data-system-suggest-list hidden></div>
+                    </div>
+                </label>
+                <label>
+                    <span>Max Distance From Origin (LY)</span>
+                    <input type="number" name="max_distance_ly" min="0" step="1" value="120">
+                </label>
+                <label>
+                    <span>Max Station Distance (Ls)</span>
+                    <input type="number" name="max_station_distance_ls" min="0" step="1000" value="20000">
+                </label>
+                <label>
+                    <span>Landing Pad Size</span>
+                    <select name="landing_pad_size">
+                        <option value="Any">Any</option>
+                        <option value="Small">Small</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Large">Large</option>
+                    </select>
+                </label>
+                <label>
+                    <span>Fleet Carriers</span>
+                    <select name="fleet_carrier_mode">
+                        <option value="exclude">Exclude Fleet Carriers</option>
+                        <option value="include">Include Fleet Carriers</option>
+                        <option value="only">Only Fleet Carriers</option>
+                    </select>
+                </label>
+                <label class="checkbox-row">
+                    <input type="checkbox" name="is_enabled" checked>
+                    <span>Filter is enabled</span>
+                </label>
+                <div class="form-actions">
+                    <button type="submit">Save Filter</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="results-panel">
+            <div class="panel-heading">
+                <div>
+                    <h2>Saved Alert Filters</h2>
+                    <p>Your personal Telegram ruleset.</p>
+                </div>
+                <form method="post" action="{{ url_for('web.clear_account_alert_messages') }}">
+                    <button type="submit" class="ghost-button">Clear Alert Messages</button>
+                </form>
+            </div>
+            <div class="market-table-wrap">
+                <table class="market-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Profit</th>
+                            <th>Supply</th>
+                            <th>Demand</th>
+                            <th>Origin</th>
+                            <th>Distance</th>
+                            <th>Pad</th>
+                            <th>Enabled</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if alerts_data.filters %}
+                            {% for filter_row in alerts_data.filters %}
+                                <tr>
+                                    <td>{{ filter_row.name }}</td>
+                                    <td>{{ "{:,}".format(filter_row.profit_min) }}</td>
+                                    <td>{{ "{:,}".format(filter_row.supply_min) }}</td>
+                                    <td>{{ "{:,}".format(filter_row.demand_min) }}</td>
+                                    <td>{{ filter_row.distance_origin_system }}</td>
+                                    <td>{{ filter_row.max_distance_ly }} LY</td>
+                                    <td>{{ filter_row.landing_pad_size }}</td>
+                                    <td>
+                                        <span class="status-badge {{ 'status-badge--active' if filter_row.is_enabled else 'status-badge--paused' }}">
+                                            {{ "Active" if filter_row.is_enabled else "Paused" }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="table-actions">
+                                            <form method="post" action="{{ url_for('web.toggle_account_filter', filter_id=filter_row.id) }}">
+                                                <input type="hidden" name="is_enabled" value="{{ 'false' if filter_row.is_enabled else 'true' }}">
+                                                <button type="submit" class="ghost-button">{{ "Turn Off" if filter_row.is_enabled else "Turn On" }}</button>
+                                            </form>
+                                            <form method="post" action="{{ url_for('web.delete_account_filter', filter_id=filter_row.id) }}">
+                                                <button type="submit" class="ghost-button">Delete</button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td colspan="9" class="empty-table-cell">No alert filters saved yet.</td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+{% endblock %}
+{% block scripts %}
+    <script src="{{ url_for('static', filename='js/system_picker.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Stations | EDDN Trade Intelligence{% endblock %}
+{% block content %}
+        <header class="station-hero">
+            <div class="hero-copy">
+                <p class="eyebrow">Station Browser</p>
+                <h1 class="station-title">Browse tracked stations.</h1>
+                <p class="hero-text">Open a station page to see its live commodity prices and recent history.</p>
+                <div class="hero-actions">
+                    <a class="pill-link" href="{{ url_for('web.dashboard') }}">Trade Filters</a>
+                </div>
+            </div>
+            <div class="hero-stats">
+                <article class="stat-card">
+                    <span>Visible Stations</span>
+                    <strong id="station-browser-count">{{ station_browser_data.summary.station_count }}</strong>
+                </article>
+                <article class="stat-card">
+                    <span>Carrier Filter</span>
+                    <strong id="station-browser-carrier">{{ station_browser_data.filters.fleet_carrier_mode|title }}</strong>
+                </article>
+                <article class="stat-card">
+                    <span>Last Listener Update</span>
+                    <strong id="station-browser-refresh">Waiting...</strong>
+                </article>
+            </div>
+        </header>
+
+        <main class="dashboard-grid">
+            <section class="filters-panel">
+                <div class="panel-heading">
+                    <h2>Station Filters</h2>
+                    <p>Filter by search, fleet carriers, landing pad size, and station distance.</p>
+                </div>
+
+                <form id="station-browser-form" class="filters-form">
+                    <label>
+                        <span>Search</span>
+                        <input type="search" name="query" value="{{ station_browser_data.filters.query }}" placeholder="Station or system">
+                    </label>
+                    <label>
+                        <span>Fleet Carriers</span>
+                        <select name="fleet_carrier_mode">
+                            <option value="exclude" {% if station_browser_data.filters.fleet_carrier_mode == 'exclude' %}selected{% endif %}>Exclude Fleet Carriers</option>
+                            <option value="include" {% if station_browser_data.filters.fleet_carrier_mode == 'include' %}selected{% endif %}>Include Fleet Carriers</option>
+                            <option value="only" {% if station_browser_data.filters.fleet_carrier_mode == 'only' %}selected{% endif %}>Only Fleet Carriers</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span>Landing Pad Size</span>
+                        <select name="landing_pad_size">
+                            {% for option in ["Any", "Small", "Medium", "Large"] %}
+                                <option value="{{ option }}" {% if station_browser_data.filters.landing_pad_size == option %}selected{% endif %}>{{ option }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <label>
+                        <span>Max Station Distance (Ls)</span>
+                        <input type="number" name="max_station_distance_ls" min="0" step="1000" value="{{ station_browser_data.filters.max_station_distance_ls }}">
+                    </label>
+
+                    <div class="form-actions">
+                        <button type="submit">Apply Filters</button>
+                        <button type="button" class="ghost-button" id="station-browser-reset">Reset</button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="results-panel">
+                <div class="panel-heading">
+                    <h2>Stations</h2>
+                    <p>Click any station to open its market details page.</p>
+                </div>
+
+                <div class="market-table-wrap">
+                    <table class="market-table">
+                        <thead>
+                            <tr>
+                                <th>Station</th>
+                                <th>System</th>
+                                <th>Type</th>
+                                <th>Pad</th>
+                                <th>Arrival</th>
+                                <th>Commodities</th>
+                                <th>Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody id="station-browser-body"></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+{% endblock %}
+{% block scripts %}
+    <script>
+        window.__INITIAL_STATION_BROWSER_DATA__ = {{ station_browser_data | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='js/stations_browser.js') }}"></script>
+{% endblock %}

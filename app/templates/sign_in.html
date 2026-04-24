@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Sign In | EDDN Trade Intelligence{% endblock %}
+{% block content %}
+    <section class="auth-shell">
+        <article class="auth-panel">
+            <p class="eyebrow">Sign In</p>
+            <h1 class="auth-title">Access your alert workspace.</h1>
+            <p class="hero-text">Manage saved filters, link Telegram, and receive personal trade alerts.</p>
+            <form class="filters-form auth-form" method="post">
+                <label>
+                    <span>Email</span>
+                    <input type="email" name="email" required>
+                </label>
+                <label>
+                    <span>Password</span>
+                    <input type="password" name="password" required>
+                </label>
+                <div class="form-actions">
+                    <button type="submit">Sign In</button>
+                    <a class="ghost-link" href="{{ url_for('web.sign_up') }}">Create account</a>
+                </div>
+            </form>
+        </article>
+    </section>
+{% endblock %}

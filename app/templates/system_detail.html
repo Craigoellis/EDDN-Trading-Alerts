@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}{{ system_data.system.name }} | System Market{% endblock %}
+{% block content %}
+        <header class="station-hero">
+            <div class="hero-copy">
+                <p class="eyebrow">System Overview</p>
+                <h1 class="station-title">{{ system_data.system.name }}</h1>
+                <p class="hero-text">Browse the live stations and recent market changes currently tracked for this system.</p>
+                <div class="hero-actions">
+                    <a class="pill-link" href="{{ url_for('web.stations_browser') }}">Browse Stations</a>
+                </div>
+            </div>
+            <div class="hero-stats">
+                <article class="stat-card">
+                    <span>Stations</span>
+                    <strong>{{ system_data.system.station_count }}</strong>
+                </article>
+                <article class="stat-card">
+                    <span>Commodity Rows</span>
+                    <strong>{{ system_data.system.commodity_rows }}</strong>
+                </article>
+                <article class="stat-card">
+                    <span>Last Listener Update</span>
+                    <strong id="system-last-refresh">Waiting...</strong>
+                </article>
+            </div>
+        </header>
+
+        <section class="markets-panel">
+            <div class="panel-heading">
+                <h2>Stations In System</h2>
+                <p>Current live station coverage for this system.</p>
+            </div>
+            <div class="panel-toolbar">
+                <a class="ghost-link" href="{{ url_for('web.dashboard') }}">Back to dashboard</a>
+            </div>
+            <div class="market-table-wrap">
+                <table class="market-table">
+                    <thead>
+                        <tr>
+                            <th>Station</th>
+                            <th>Type</th>
+                            <th>Pad</th>
+                            <th>Arrival</th>
+                            <th>Commodities</th>
+                            <th>Updated</th>
+                        </tr>
+                    </thead>
+                    <tbody id="system-stations-body"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="markets-panel">
+            <div class="panel-heading">
+                <h2>Recent History</h2>
+                <p>Latest captured market changes for this system.</p>
+            </div>
+            <div class="market-table-wrap">
+                <table class="market-table">
+                    <thead>
+                        <tr>
+                            <th>Commodity</th>
+                            <th>Station</th>
+                            <th>Buy</th>
+                            <th>Sell</th>
+                            <th>Supply</th>
+                            <th>Demand</th>
+                            <th>Updated</th>
+                        </tr>
+                    </thead>
+                    <tbody id="system-history-body"></tbody>
+                </table>
+            </div>
+        </section>
+{% endblock %}
+{% block scripts %}
+    <script>
+        window.__INITIAL_SYSTEM_DATA__ = {{ system_data | tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='js/system_detail.js') }}"></script>
+{% endblock %}
