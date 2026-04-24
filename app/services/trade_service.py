@@ -452,16 +452,16 @@ class TradeService:
                 user_id=user["id"],
                 filter_id=filter_record["id"],
             )
-            active_group_owners = self._build_active_sell_group_owners(
+            active_group_owners = self._build_active_route_group_owners(
                 existing_deliveries
             )
             for trade in user_opportunities:
                 user_alert_key = trade.get("user_alert_key", trade["alert_key"])
-                sell_group_key = self._build_sell_group_key(trade)
+                route_group_keys = self._build_route_group_keys(trade)
                 existing_delivery = self._find_matching_alert_delivery(
                     deliveries=existing_deliveries,
                     alert_key=user_alert_key,
-                    sell_group_key=sell_group_key,
+                    route_group_keys=route_group_keys,
                 )
                 delivery_alert_key = (existing_delivery or {}).get("alert_key", user_alert_key)
 
@@ -472,8 +472,7 @@ class TradeService:
                     continue
 
                 if existing_delivery is None:
-                    group_owner_key = active_group_owners.get(sell_group_key)
-                    if group_owner_key and group_owner_key != delivery_alert_key:
+                    if self._has_conflicting_group_owner(active_group_owners, route_group_keys, delivery_alert_key):
                         continue
 
                 active_keys.add(delivery_alert_key)
@@ -495,7 +494,7 @@ class TradeService:
                     ),
                     timezone_name=user.get("timezone", "UTC"),
                 )
-                active_group_owners[sell_group_key] = delivery_alert_key
+                self._assign_route_group_owners(active_group_owners, route_group_keys, delivery_alert_key)
                 self._user_repository.upsert_alert_delivery(
                     user_id=user["id"],
                     filter_id=filter_record["id"],
@@ -525,16 +524,16 @@ class TradeService:
             user_id=user["id"],
             filter_id=filter_record["id"],
         )
-        active_group_owners = self._build_active_sell_group_owners(
+        active_group_owners = self._build_active_route_group_owners(
             existing_deliveries
         )
         for trade in user_opportunities:
             user_alert_key = trade.get("user_alert_key", trade["alert_key"])
-            sell_group_key = self._build_sell_group_key(trade)
+            route_group_keys = self._build_route_group_keys(trade)
             existing_delivery = self._find_matching_alert_delivery(
                 deliveries=existing_deliveries,
                 alert_key=user_alert_key,
-                sell_group_key=sell_group_key,
+                route_group_keys=route_group_keys,
             )
             delivery_alert_key = (existing_delivery or {}).get("alert_key", user_alert_key)
 
@@ -545,8 +544,7 @@ class TradeService:
                 continue
 
             if existing_delivery is None:
-                group_owner_key = active_group_owners.get(sell_group_key)
-                if group_owner_key and group_owner_key != delivery_alert_key:
+                if self._has_conflicting_group_owner(active_group_owners, route_group_keys, delivery_alert_key):
                     continue
 
             alert_result = self._alert_service.send_trade_alert_to_chat(
@@ -576,7 +574,7 @@ class TradeService:
                 terminal_reason=None,
                 trade_snapshot=self._build_trade_snapshot(trade),
             )
-            active_group_owners[sell_group_key] = delivery_alert_key
+            self._assign_route_group_owners(active_group_owners, route_group_keys, delivery_alert_key)
             delivered_count += 1
         return delivered_count
 
@@ -757,39 +755,56 @@ class TradeService:
             )
 
     @staticmethod
-    def _build_sell_group_key(trade: dict) -> str:
-        return "|".join(
-            [
-                str(trade.get("commodity") or ""),
-                str(trade.get("sell_endpoint_identity") or ""),
-            ]
-        )
+    def _build_route_group_keys(trade: dict) -> list[str]:
+        keys = []
+        commodity = str(trade.get("commodity") or "")
+        buy_endpoint_identity = str(trade.get("buy_endpoint_identity") or "")
+        sell_endpoint_identity = str(trade.get("sell_endpoint_identity") or "")
+        if commodity and buy_endpoint_identity:
+            keys.append("|".join([commodity, "buy", buy_endpoint_identity]))
+        if commodity and sell_endpoint_identity:
+            keys.append("|".join([commodity, "sell", sell_endpoint_identity]))
+        return keys
 
-    def _build_active_sell_group_owners(self, deliveries: list[dict]) -> dict[str, str]:
+    def _build_active_route_group_owners(self, deliveries: list[dict]) -> dict[str, str]:
         owners = {}
         for delivery in deliveries:
             if delivery.get("status") != "active":
                 continue
             trade_snapshot = delivery.get("trade_snapshot") or {}
-            sell_group_key = self._build_sell_group_key(trade_snapshot)
-            if not sell_group_key.strip("|"):
-                continue
-            owners.setdefault(sell_group_key, delivery["alert_key"])
+            for route_group_key in self._build_route_group_keys(trade_snapshot):
+                if not route_group_key.strip("|"):
+                    continue
+                owners.setdefault(route_group_key, delivery["alert_key"])
         return owners
 
-    def _find_matching_alert_delivery(self, *, deliveries: list[dict], alert_key: str, sell_group_key: str) -> dict | None:
+    def _find_matching_alert_delivery(self, *, deliveries: list[dict], alert_key: str, route_group_keys: list[str]) -> dict | None:
         for delivery in deliveries:
             if delivery.get("alert_key") == alert_key:
                 return delivery
-        if not sell_group_key.strip("|"):
+        if not route_group_keys:
             return None
         for delivery in deliveries:
             if delivery.get("status") != "active":
                 continue
             trade_snapshot = delivery.get("trade_snapshot") or {}
-            if self._build_sell_group_key(trade_snapshot) == sell_group_key:
+            existing_route_group_keys = self._build_route_group_keys(trade_snapshot)
+            if any(route_group_key in existing_route_group_keys for route_group_key in route_group_keys):
                 return delivery
         return None
+
+    @staticmethod
+    def _has_conflicting_group_owner(active_group_owners: dict[str, str], route_group_keys: list[str], delivery_alert_key: str) -> bool:
+        for route_group_key in route_group_keys:
+            group_owner_key = active_group_owners.get(route_group_key)
+            if group_owner_key and group_owner_key != delivery_alert_key:
+                return True
+        return False
+
+    @staticmethod
+    def _assign_route_group_owners(active_group_owners: dict[str, str], route_group_keys: list[str], delivery_alert_key: str) -> None:
+        for route_group_key in route_group_keys:
+            active_group_owners[route_group_key] = delivery_alert_key
 
     def get_market_activity(self, filters: dict) -> list[dict]:
         markets = self._market_repository.get_markets_snapshot()
