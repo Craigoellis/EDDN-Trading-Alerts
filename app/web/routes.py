@@ -299,26 +299,24 @@ def get_system_detail():
 
 @web_bp.route("/commodities")
 def commodity_detail():
-    commodity_name = request.args.get("commodity", "").lower()
     trade_service = current_app.extensions["trade_service"]
-    payload = trade_service.build_commodity_payload(commodity_name)
+    payload = trade_service.build_commodity_finder_payload(request.args.to_dict())
     return render_template("commodity_detail.html", commodity_data=payload)
 
 
 @web_bp.route("/api/commodities")
 def get_commodity_detail():
-    commodity_name = request.args.get("commodity", "").lower()
     trade_service = current_app.extensions["trade_service"]
-    payload = trade_service.build_commodity_payload(commodity_name)
+    payload = trade_service.build_commodity_finder_payload(request.args.to_dict())
     return jsonify(payload)
 
 
 @web_bp.route("/search")
 def search():
-    query = request.args.get("query", "")
-    trade_service = current_app.extensions["trade_service"]
-    payload = trade_service.build_search_payload(query)
-    return render_template("search_results.html", search_data=payload)
+    commodity_name = request.args.get("query", "").strip().lower()
+    if commodity_name:
+        return redirect(url_for("web.commodity_detail", commodity=commodity_name))
+    return redirect(url_for("web.commodity_detail"))
 
 
 @web_bp.route("/api/search")
@@ -334,6 +332,13 @@ def system_suggestions():
     query = request.args.get("query", "")
     trade_service = current_app.extensions["trade_service"]
     return jsonify({"systems": trade_service.suggest_systems(query)})
+
+
+@web_bp.route("/api/commodity-suggestions")
+def commodity_suggestions():
+    query = request.args.get("query", "")
+    trade_service = current_app.extensions["trade_service"]
+    return jsonify({"commodities": trade_service.suggest_commodities(query)})
 
 
 @web_bp.route("/api/health")

@@ -15,6 +15,7 @@ class MarketRepository:
         self._market_entries_path = self._storage_dir / "market_entries.json"
         self._history_path = self._storage_dir / "price_history.json"
         self._carrier_names_path = self._storage_dir / "carrier_names.json"
+        self._station_metadata_path = self._storage_dir / "station_metadata.json"
         self._alerts_path = self._storage_dir / "sent_alerts.json"
         self._metadata_path = self._storage_dir / "app_metadata.json"
         self._max_history_entries = max_history_entries
@@ -23,6 +24,7 @@ class MarketRepository:
         self._market_entries = self._deserialize_market_entries(self._read_json(self._market_entries_path, {}))
         self._history = self._deserialize_history(self._read_json(self._history_path, []))
         self._carrier_names = self._read_json(self._carrier_names_path, {})
+        self._station_metadata = self._read_json(self._station_metadata_path, {})
         self._alerts = self._read_json(self._alerts_path, {})
         self._metadata = self._read_json(self._metadata_path, {})
 
@@ -169,6 +171,44 @@ class MarketRepository:
         name = entry.get("name")
         return str(name) if name else None
 
+    def get_station_metadata(self, system_name: str, station_name: str) -> dict | None:
+        cache_key = self._station_metadata_key(system_name, station_name)
+        with self._lock:
+            entry = self._station_metadata.get(cache_key)
+        return dict(entry) if isinstance(entry, dict) else None
+
+    def upsert_station_metadata(self, *, system_name: str, station_name: str, station_record: dict) -> None:
+        self.upsert_station_metadata_batch(
+            system_name=system_name,
+            station_records=[
+                {
+                    "name": station_name,
+                    **station_record,
+                }
+            ],
+        )
+
+    def upsert_station_metadata_batch(self, *, system_name: str, station_records: list[dict]) -> None:
+        with self._lock:
+            dirty = False
+            for station_record in station_records:
+                station_name = station_record.get("name")
+                if not station_name:
+                    continue
+                cache_key = self._station_metadata_key(system_name, station_name)
+                normalized_record = {
+                    "system": system_name,
+                    "station": station_name,
+                    "type": station_record.get("type") or "Unknown",
+                    "pad": station_record.get("pad") or "Unknown",
+                    "distance": station_record.get("distance"),
+                    "updated_at": station_record.get("updated_at"),
+                }
+                self._station_metadata[cache_key] = normalized_record
+                dirty = True
+            if dirty:
+                self._persist_station_metadata()
+
     def search_entities(self, query: str, limit: int = 8) -> dict:
         query_normalized = query.strip().lower()
         if not query_normalized:
@@ -213,6 +253,19 @@ class MarketRepository:
             }
         return sorted(systems)[:limit]
 
+    def search_commodity_names(self, query: str, limit: int = 8) -> list[str]:
+        query_normalized = query.strip().lower()
+        if not query_normalized:
+            return []
+
+        with self._lock:
+            commodities = [
+                commodity_name
+                for commodity_name in self._market_entries.keys()
+                if query_normalized in commodity_name.lower()
+            ]
+        return sorted(commodities)[:limit]
+
     def cleanup_alerts(self) -> None:
         cutoff = time() - self._alert_expiry_seconds
         with self._lock:
@@ -255,6 +308,7 @@ class MarketRepository:
             (self._market_entries_path, {}),
             (self._history_path, []),
             (self._carrier_names_path, {}),
+            (self._station_metadata_path, {}),
             (self._alerts_path, {}),
             (self._metadata_path, {}),
         ):
@@ -298,6 +352,9 @@ class MarketRepository:
 
     def _persist_carrier_names(self) -> None:
         self._write_json(self._carrier_names_path, self._carrier_names)
+
+    def _persist_station_metadata(self) -> None:
+        self._write_json(self._station_metadata_path, self._station_metadata)
 
     def _persist_alerts(self) -> None:
         self._write_json(self._alerts_path, self._alerts)
@@ -365,3 +422,7 @@ class MarketRepository:
         if isinstance(value, datetime):
             return value
         return datetime.fromisoformat(value)
+
+    @staticmethod
+    def _station_metadata_key(system_name: str, station_name: str) -> str:
+        return f"{system_name}|{station_name}".lower()

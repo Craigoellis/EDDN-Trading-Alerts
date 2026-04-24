@@ -16,15 +16,28 @@ except ImportError:  # pragma: no cover - exercised in runtime environments with
 class EDDNPoller:
     FC_CODE_RE = re.compile(r"\b[A-Z0-9]{3}-[A-Z0-9]{3}\b", re.IGNORECASE)
 
-    def __init__(self, repository, trade_service, eddn_listener_url: str, alert_process_interval_seconds: int = 20) -> None:
+    def __init__(
+        self,
+        repository,
+        trade_service,
+        station_service,
+        eddn_listener_url: str,
+        alert_process_interval_seconds: int = 20,
+        station_refresh_interval_seconds: int = 2,
+        station_refresh_batch_size: int = 1,
+    ) -> None:
         self._repository = repository
         self._trade_service = trade_service
+        self._station_service = station_service
         self._eddn_listener_url = self._normalize_listener_url(eddn_listener_url)
         self._alert_process_interval_seconds = alert_process_interval_seconds
+        self._station_refresh_interval_seconds = station_refresh_interval_seconds
+        self._station_refresh_batch_size = max(station_refresh_batch_size, 1)
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._message_count = 0
         self._last_alert_processing_epoch = 0.0
+        self._last_station_refresh_epoch = 0.0
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -50,16 +63,20 @@ class EDDNPoller:
                 try:
                     raw_frame = socket.recv()
                 except zmq.error.Again:
+                    self._process_background_refreshes()
                     continue
                 except Exception as exc:
                     print(f"EDDN listener receive error: {exc}")
+                    self._process_background_refreshes()
                     continue
 
                 raw_message = self._decode_message(raw_frame)
                 if not raw_message:
+                    self._process_background_refreshes()
                     continue
 
                 self._process_message(raw_message)
+                self._process_background_refreshes()
         finally:
             socket.close()
 
@@ -114,6 +131,7 @@ class EDDNPoller:
             return
 
         self._repository.upsert_market_batch(market_updates)
+        self._station_service.queue_station_refresh(system_name)
 
         self._message_count += 1
         self._repository.set_last_poll()
@@ -151,6 +169,8 @@ class EDDNPoller:
 
         if stored_count:
             self._repository.set_last_poll()
+            if system_name:
+                self._station_service.queue_station_refresh(system_name)
 
     def _extract_carrier_name_and_code(self, signal_name: str) -> tuple[str, str] | None:
         match = self.FC_CODE_RE.search(signal_name or "")
@@ -182,3 +202,10 @@ class EDDNPoller:
     @staticmethod
     def _normalize_listener_url(listener_url: str) -> str:
         return listener_url.rstrip("/")
+
+    def _process_background_refreshes(self) -> None:
+        now_epoch = time()
+        if now_epoch - self._last_station_refresh_epoch < self._station_refresh_interval_seconds:
+            return
+        self._last_station_refresh_epoch = now_epoch
+        self._station_service.refresh_pending_station_metadata(max_systems=self._station_refresh_batch_size)

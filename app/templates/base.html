@@ -23,17 +23,13 @@
                 <nav class="topnav">
                     <a class="topnav-link {% if request.endpoint == 'web.dashboard' %}is-active{% endif %}" href="{{ url_for('web.dashboard') }}">Trade Filter</a>
                     <a class="topnav-link {% if request.endpoint == 'web.stations_browser' %}is-active{% endif %}" href="{{ url_for('web.stations_browser') }}">Stations</a>
-                    <a class="topnav-link {% if request.endpoint == 'web.search' %}is-active{% endif %}" href="{{ url_for('web.search', query='') }}">Search</a>
+                    <a class="topnav-link {% if request.endpoint == 'web.commodity_detail' %}is-active{% endif %}" href="{{ url_for('web.commodity_detail') }}">Commodity</a>
                     {% if current_user %}
                         <a class="topnav-link {% if request.endpoint == 'web.alerts' or request.endpoint == 'web.account' %}is-active{% endif %}" href="{{ url_for('web.alerts') }}">Alerts</a>
                         <a class="topnav-link {% if request.endpoint == 'web.profile' %}is-active{% endif %}" href="{{ url_for('web.profile') }}">Profile</a>
                     {% endif %}
                 </nav>
                 <div class="topbar-actions">
-                    <form class="topbar-search" action="{{ url_for('web.search') }}" method="get">
-                        <input type="search" name="query" placeholder="Search station, system, or commodity">
-                        <button type="submit">Search</button>
-                    </form>
                     {% if current_user %}
                         <form action="{{ url_for('web.sign_out') }}" method="post" class="topbar-auth">
                             <span class="topbar-user">{{ current_user.username }}</span>

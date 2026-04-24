@@ -1,85 +1,172 @@
 {% extends "base.html" %}
-{% block title %}{{ commodity_data.commodity.display_name }} | Commodity Market{% endblock %}
+{% block title %}Commodity | EDDN Trade Intelligence{% endblock %}
 {% block content %}
         <header class="station-hero">
             <div class="hero-copy">
-                <p class="eyebrow">Commodity Overview</p>
-                <h1 class="station-title">{{ commodity_data.commodity.display_name }}</h1>
-                <p class="hero-text">Current live listings and recent changes for this commodity across tracked stations.</p>
+                <p class="eyebrow">Commodity Finder</p>
+                <h1 class="station-title">Find where your commodity is bought and sold.</h1>
+                <p class="hero-text">Search a commodity, then narrow buy-side and sell-side stations with separate origin and arrival filters.</p>
                 <div class="hero-actions">
-                    <a class="pill-link" href="{{ url_for('web.search', query=commodity_data.commodity.name) }}">Find Related</a>
+                    <a class="pill-link" href="{{ url_for('web.dashboard') }}">Trade Filter</a>
+                    <a class="ghost-link" href="{{ url_for('web.stations_browser') }}">Browse Stations</a>
                 </div>
             </div>
             <div class="hero-stats">
                 <article class="stat-card">
-                    <span>Listings</span>
-                    <strong>{{ commodity_data.commodity.listing_count }}</strong>
+                    <span>Buy Listings</span>
+                    <strong id="commodity-buy-count">{{ commodity_data.summary.buy_listing_count }}</strong>
                 </article>
                 <article class="stat-card">
-                    <span>Best Sell</span>
-                    <strong>{{ "{:,}".format(commodity_data.commodity.best_sell_price) }} Cr</strong>
+                    <span>Sell Listings</span>
+                    <strong id="commodity-sell-count">{{ commodity_data.summary.sell_listing_count }}</strong>
                 </article>
                 <article class="stat-card">
-                    <span>Lowest Buy</span>
-                    <strong>{{ "{:,}".format(commodity_data.commodity.lowest_buy_price) }} Cr</strong>
+                    <span>Best Buy / Sell</span>
+                    <strong id="commodity-best-prices">
+                        {{ "{:,}".format(commodity_data.summary.best_buy_price) }} / {{ "{:,}".format(commodity_data.summary.best_sell_price) }} Cr
+                    </strong>
                 </article>
             </div>
         </header>
 
-        <section class="markets-panel">
-            <div class="panel-heading">
-                <h2>Live Listings</h2>
-                <p>Every current station entry we have for this commodity.</p>
-            </div>
-            <div class="panel-toolbar">
-                <a class="ghost-link" href="{{ url_for('web.dashboard') }}">Back to dashboard</a>
-            </div>
-            <div class="market-table-wrap">
-                <table class="market-table">
-                    <thead>
-                        <tr>
-                            <th>Station</th>
-                            <th>System</th>
-                            <th>Buy</th>
-                            <th>Sell</th>
-                            <th>Supply</th>
-                            <th>Demand</th>
-                            <th>Pad</th>
-                            <th>Arrival</th>
-                            <th>Updated</th>
-                        </tr>
-                    </thead>
-                    <tbody id="commodity-markets-body"></tbody>
-                </table>
-            </div>
-        </section>
+        <main class="dashboard-grid">
+            <section class="filters-panel">
+                <div class="panel-heading">
+                    <h2>Commodity Filters</h2>
+                    <p>Autocomplete the commodity name, then set separate travel limits for stations where you want to buy and sell.</p>
+                </div>
 
-        <section class="markets-panel">
-            <div class="panel-heading">
-                <h2>Recent History</h2>
-                <p>Recent price and quantity updates captured for this commodity.</p>
-            </div>
-            <div class="market-table-wrap">
-                <table class="market-table">
-                    <thead>
-                        <tr>
-                            <th>Station</th>
-                            <th>System</th>
-                            <th>Buy</th>
-                            <th>Sell</th>
-                            <th>Supply</th>
-                            <th>Demand</th>
-                            <th>Updated</th>
-                        </tr>
-                    </thead>
-                    <tbody id="commodity-history-body"></tbody>
-                </table>
-            </div>
-        </section>
+                <form id="commodity-filters-form" class="filters-form">
+                    <label>
+                        <span>Commodity</span>
+                        <div class="suggest-field">
+                            <input
+                                type="search"
+                                name="commodity"
+                                value="{{ commodity_data.filters.commodity }}"
+                                placeholder="Start typing a commodity"
+                                autocomplete="off"
+                                data-commodity-suggest
+                            >
+                            <div class="suggest-dropdown" data-commodity-suggest-list hidden></div>
+                        </div>
+                    </label>
+
+                    <div class="panel-heading">
+                        <h2>Buy Filters</h2>
+                        <p>Show stations where you can buy this commodity.</p>
+                    </div>
+                    <label>
+                        <span>Buy Origin System</span>
+                        <div class="suggest-field">
+                            <input
+                                type="search"
+                                name="buy_origin_system"
+                                value="{{ commodity_data.filters.buy_origin_system }}"
+                                placeholder="Start typing a system"
+                                autocomplete="off"
+                                data-system-suggest
+                            >
+                            <div class="suggest-dropdown" data-system-suggest-list hidden></div>
+                        </div>
+                    </label>
+                    <label>
+                        <span>Max Buy Distance From System (LY)</span>
+                        <input type="number" name="buy_max_distance_ly" min="0" step="1" value="{{ commodity_data.filters.buy_max_distance_ly }}">
+                    </label>
+                    <label>
+                        <span>Max Buy Distance From Star (Ls)</span>
+                        <input type="number" name="buy_max_station_distance_ls" min="0" step="1000" value="{{ commodity_data.filters.buy_max_station_distance_ls }}">
+                    </label>
+
+                    <div class="panel-heading">
+                        <h2>Sell Filters</h2>
+                        <p>Show stations where you can sell this commodity.</p>
+                    </div>
+                    <label>
+                        <span>Sell Origin System</span>
+                        <div class="suggest-field">
+                            <input
+                                type="search"
+                                name="sell_origin_system"
+                                value="{{ commodity_data.filters.sell_origin_system }}"
+                                placeholder="Start typing a system"
+                                autocomplete="off"
+                                data-system-suggest
+                            >
+                            <div class="suggest-dropdown" data-system-suggest-list hidden></div>
+                        </div>
+                    </label>
+                    <label>
+                        <span>Max Sell Distance From System (LY)</span>
+                        <input type="number" name="sell_max_distance_ly" min="0" step="1" value="{{ commodity_data.filters.sell_max_distance_ly }}">
+                    </label>
+                    <label>
+                        <span>Max Sell Distance From Star (Ls)</span>
+                        <input type="number" name="sell_max_station_distance_ls" min="0" step="1000" value="{{ commodity_data.filters.sell_max_station_distance_ls }}">
+                    </label>
+
+                    <div class="form-actions">
+                        <button type="submit">Apply Filters</button>
+                        <button type="button" class="ghost-button" id="commodity-reset">Reset</button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="results-panel">
+                <div class="panel-heading">
+                    <h2>Buy Stations</h2>
+                    <p id="commodity-last-refresh">Waiting for refresh data...</p>
+                </div>
+                <div class="market-table-wrap">
+                    <table class="market-table">
+                        <thead>
+                            <tr>
+                                <th>Station</th>
+                                <th>System</th>
+                                <th>Price</th>
+                                <th>Supply</th>
+                                <th>Type</th>
+                                <th>Pad</th>
+                                <th>Distance</th>
+                                <th>Arrival</th>
+                                <th>Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody id="commodity-buy-body"></tbody>
+                    </table>
+                </div>
+
+                <div class="panel-heading">
+                    <h2>Sell Stations</h2>
+                    <p>Best current destinations for selling the same commodity.</p>
+                </div>
+                <div class="market-table-wrap">
+                    <table class="market-table">
+                        <thead>
+                            <tr>
+                                <th>Station</th>
+                                <th>System</th>
+                                <th>Price</th>
+                                <th>Demand</th>
+                                <th>Type</th>
+                                <th>Pad</th>
+                                <th>Distance</th>
+                                <th>Arrival</th>
+                                <th>Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody id="commodity-sell-body"></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
 {% endblock %}
 {% block scripts %}
     <script>
         window.__INITIAL_COMMODITY_DATA__ = {{ commodity_data | tojson }};
     </script>
+    <script src="{{ url_for('static', filename='js/system_picker.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/commodity_picker.js') }}"></script>
     <script src="{{ url_for('static', filename='js/commodity_detail.js') }}"></script>
 {% endblock %}

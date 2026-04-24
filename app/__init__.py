@@ -34,6 +34,7 @@ def create_app() -> Flask:
         inara_api_url=app.config["INARA_API_URL"],
         inara_api_key=app.config["INARA_API_KEY"],
         edsm_failure_cooldown_seconds=app.config["EDSM_FAILURE_COOLDOWN_SECONDS"],
+        station_metadata_ttl_seconds=app.config["STATION_METADATA_TTL_SECONDS"],
         market_repository=market_repository,
     )
     alert_service = AlertService(
@@ -60,8 +61,11 @@ def create_app() -> Flask:
     poller = EDDNPoller(
         repository=market_repository,
         trade_service=trade_service,
+        station_service=station_service,
         eddn_listener_url=app.config["EDDN_LISTENER_URL"],
         alert_process_interval_seconds=app.config["ALERT_PROCESS_INTERVAL_SECONDS"],
+        station_refresh_interval_seconds=app.config["STATION_REFRESH_INTERVAL_SECONDS"],
+        station_refresh_batch_size=app.config["STATION_REFRESH_BATCH_SIZE"],
     )
     telegram_poller = TelegramPoller(
         bot_token=app.config["BOT_TOKEN"],

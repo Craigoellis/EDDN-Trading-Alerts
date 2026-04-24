@@ -39,7 +39,11 @@ class TradeService:
 
         for commodity_name, entries in markets.items():
             for entry in entries:
-                station = self._station_service.get_station_data(entry["system"], entry["station"])
+                station = self._station_service.get_station_data(
+                    entry["system"],
+                    entry["station"],
+                    allow_live_lookup=False,
+                )
                 station_type = station.get("type") or entry.get("stationType") or "Unknown"
                 pad_size = station.get("pad") or "Unknown"
                 arrival_distance_ls = self._normalize_station_distance(station.get("distance"))
@@ -58,7 +62,11 @@ class TradeService:
                 station_entry = stations.setdefault(
                     key,
                     {
-                        "station_name": self._station_service.prettify_station_name(entry["station"], station_type),
+                        "station_name": self._station_service.prettify_station_name(
+                            entry["station"],
+                            station_type,
+                            allow_live_lookup=False,
+                        ),
                         "raw_station_name": entry["station"],
                         "system": entry["system"],
                         "station_type": station_type,
@@ -91,7 +99,7 @@ class TradeService:
     def build_station_payload(self, system_name: str, station_name: str, params: dict | None = None) -> dict:
         params = params or {}
         station_rows = self._market_repository.get_station_snapshot(system_name, station_name)
-        station_info = self._station_service.get_station_data(system_name, station_name)
+        station_info = self._station_service.get_station_data(system_name, station_name, allow_live_lookup=False)
         station_type = station_info.get("type") or "Unknown"
         station_pad = station_info.get("pad") or "Unknown"
         station_distance_ls = self._normalize_station_distance(station_info.get("distance"))
@@ -123,7 +131,11 @@ class TradeService:
 
         return {
             "station": {
-                "name": self._station_service.prettify_station_name(station_name, station_type),
+                "name": self._station_service.prettify_station_name(
+                    station_name,
+                    station_type,
+                    allow_live_lookup=False,
+                ),
                 "raw_name": station_name,
                 "system": system_name,
                 "type": station_type,
@@ -145,7 +157,11 @@ class TradeService:
         stations = {}
         for row in rows:
             station_key = (row["system"], row["station"])
-            station_info = self._station_service.get_station_data(row["system"], row["station"])
+            station_info = self._station_service.get_station_data(
+                row["system"],
+                row["station"],
+                allow_live_lookup=False,
+            )
             station_type = station_info.get("type") or "Unknown"
             station_pad = station_info.get("pad") or "Unknown"
             station_distance_ls = self._normalize_station_distance(station_info.get("distance"))
@@ -153,7 +169,11 @@ class TradeService:
             station_entry = stations.setdefault(
                 station_key,
                 {
-                    "station_name": self._station_service.prettify_station_name(row["station"], station_type),
+                    "station_name": self._station_service.prettify_station_name(
+                        row["station"],
+                        station_type,
+                        allow_live_lookup=False,
+                    ),
                     "raw_station_name": row["station"],
                     "system": row["system"],
                     "station_type": station_type,
@@ -190,13 +210,21 @@ class TradeService:
         rows = self._market_repository.get_commodity_snapshot(commodity_name)
         market_rows = []
         for row in rows:
-            station_info = self._station_service.get_station_data(row["system"], row["station"])
+            station_info = self._station_service.get_station_data(
+                row["system"],
+                row["station"],
+                allow_live_lookup=False,
+            )
             station_type = station_info.get("type") or "Unknown"
             market_rows.append(
                 {
                     "commodity": commodity_name,
                     "commodity_display": commodity_name.replace("-", " ").title(),
-                    "station_name": self._station_service.prettify_station_name(row["station"], station_type),
+                    "station_name": self._station_service.prettify_station_name(
+                        row["station"],
+                        station_type,
+                        allow_live_lookup=False,
+                    ),
                     "raw_station_name": row["station"],
                     "system": row["system"],
                     "station_type": station_type,
@@ -251,6 +279,154 @@ class TradeService:
 
     def suggest_systems(self, query: str, limit: int = 8) -> list[str]:
         return self._market_repository.search_system_names(query, limit=limit)
+
+    def suggest_commodities(self, query: str, limit: int = 8) -> list[str]:
+        return self._market_repository.search_commodity_names(query, limit=limit)
+
+    def build_commodity_finder_payload(self, params: dict | None = None) -> dict:
+        params = params or {}
+        filters = self.parse_commodity_finder_filters(params)
+        commodity_name = filters["commodity"]
+
+        if not commodity_name:
+            return {
+                "filters": filters,
+                "summary": {
+                    "commodity_selected": False,
+                    "buy_listing_count": 0,
+                    "sell_listing_count": 0,
+                    "best_buy_price": 0,
+                    "best_sell_price": 0,
+                    "last_poll_epoch": self._market_repository.get_last_poll_epoch(),
+                },
+                "buy_listings": [],
+                "sell_listings": [],
+            }
+
+        rows = self._market_repository.get_commodity_snapshot(commodity_name)
+        buy_listings = []
+        sell_listings = []
+        buy_distance_cache = {}
+        sell_distance_cache = {}
+
+        for row in rows:
+            station_info = self._station_service.get_station_data(
+                row["system"],
+                row["station"],
+                allow_live_lookup=False,
+            )
+            station_type = station_info.get("type") or "Unknown"
+            pad_size = station_info.get("pad") or "Unknown"
+            arrival_distance_ls = self._normalize_station_distance(station_info.get("distance"))
+            station_name = self._station_service.prettify_station_name(
+                row["station"],
+                station_type,
+                allow_live_lookup=False,
+            )
+
+            base_listing = {
+                "commodity": commodity_name,
+                "commodity_display": commodity_name.replace("-", " ").title(),
+                "station_name": station_name,
+                "raw_station_name": row["station"],
+                "system": row["system"],
+                "station_type": station_type,
+                "pad_size": pad_size,
+                "arrival_distance_ls": arrival_distance_ls,
+                "buy_price": row["buy"],
+                "sell_price": row["sell"],
+                "stock": row["stock"],
+                "demand": row["demand"],
+                "updated_at": row["updated"].isoformat(),
+            }
+
+            buy_origin_system = filters["buy_origin_system"]
+            if buy_origin_system:
+                buy_distance_ly = buy_distance_cache.get(row["system"].lower())
+                if buy_distance_ly is None and row["system"].lower() not in buy_distance_cache:
+                    buy_distance_cache[row["system"].lower()] = self._station_service.calc_distance_ly(
+                        buy_origin_system,
+                        row["system"],
+                    )
+                buy_distance_ly = buy_distance_cache.get(row["system"].lower())
+            else:
+                buy_distance_ly = None
+
+            sell_origin_system = filters["sell_origin_system"]
+            sell_distance_key = row["system"].lower()
+            if sell_origin_system:
+                sell_distance_ly = sell_distance_cache.get(sell_distance_key)
+                if sell_distance_ly is None and sell_distance_key not in sell_distance_cache:
+                    sell_distance_cache[sell_distance_key] = self._station_service.calc_distance_ly(
+                        sell_origin_system,
+                        row["system"],
+                    )
+                sell_distance_ly = sell_distance_cache.get(sell_distance_key)
+            else:
+                sell_distance_ly = None
+
+            if self._matches_commodity_station_filters(
+                price=row["buy"],
+                quantity=row["stock"],
+                distance_ly=buy_distance_ly,
+                arrival_distance_ls=arrival_distance_ls,
+                max_distance_ly=filters["buy_max_distance_ly"],
+                max_station_distance_ls=filters["buy_max_station_distance_ls"],
+            ):
+                buy_listings.append(
+                    {
+                        **base_listing,
+                        "distance_origin_system": buy_origin_system,
+                        "distance_from_origin_ly": buy_distance_ly,
+                    }
+                )
+
+            if self._matches_commodity_station_filters(
+                price=row["sell"],
+                quantity=row["demand"],
+                distance_ly=sell_distance_ly,
+                arrival_distance_ls=arrival_distance_ls,
+                max_distance_ly=filters["sell_max_distance_ly"],
+                max_station_distance_ls=filters["sell_max_station_distance_ls"],
+            ):
+                sell_listings.append(
+                    {
+                        **base_listing,
+                        "distance_origin_system": sell_origin_system,
+                        "distance_from_origin_ly": sell_distance_ly,
+                    }
+                )
+
+        buy_listings.sort(
+            key=lambda item: (
+                item["buy_price"] if item["buy_price"] > 0 else float("inf"),
+                item["distance_from_origin_ly"] if item["distance_from_origin_ly"] is not None else float("inf"),
+                item["arrival_distance_ls"] if item["arrival_distance_ls"] is not None else float("inf"),
+                item["station_name"],
+            )
+        )
+        sell_listings.sort(
+            key=lambda item: (
+                -(item["sell_price"] or 0),
+                item["distance_from_origin_ly"] if item["distance_from_origin_ly"] is not None else float("inf"),
+                item["arrival_distance_ls"] if item["arrival_distance_ls"] is not None else float("inf"),
+                item["station_name"],
+            )
+        )
+
+        return {
+            "filters": filters,
+            "summary": {
+                "commodity_selected": True,
+                "buy_listing_count": len(buy_listings),
+                "sell_listing_count": len(sell_listings),
+                "best_buy_price": min((item["buy_price"] for item in buy_listings), default=0),
+                "best_sell_price": max((item["sell_price"] for item in sell_listings), default=0),
+                "last_poll_epoch": self._market_repository.get_last_poll_epoch(),
+            },
+            "buy_listings": buy_listings[:150],
+            "sell_listings": sell_listings[:150],
+        }
 
     def process_trade_alerts(self) -> None:
         self._market_repository.cleanup_alerts()
@@ -671,6 +847,25 @@ class TradeService:
             filters["fleet_carrier_mode"] = "exclude"
         return filters
 
+    def parse_commodity_finder_filters(self, params: dict) -> dict:
+        return {
+            "commodity": str(params.get("commodity", "")).strip().lower(),
+            "buy_origin_system": str(params.get("buy_origin_system", "Sol")).strip() or "Sol",
+            "buy_max_distance_ly": self._coerce_float(params.get("buy_max_distance_ly"), 120, minimum=0),
+            "buy_max_station_distance_ls": self._coerce_int(
+                params.get("buy_max_station_distance_ls"),
+                20000,
+                minimum=0,
+            ),
+            "sell_origin_system": str(params.get("sell_origin_system", "Sol")).strip() or "Sol",
+            "sell_max_distance_ly": self._coerce_float(params.get("sell_max_distance_ly"), 120, minimum=0),
+            "sell_max_station_distance_ls": self._coerce_int(
+                params.get("sell_max_station_distance_ls"),
+                20000,
+                minimum=0,
+            ),
+        }
+
     def parse_filters(self, params: dict) -> dict:
         filters = dict(self._default_filters)
         filters["profit_min"] = self._coerce_int(params.get("profit_min"), filters["profit_min"], minimum=0)
@@ -850,6 +1045,24 @@ class TradeService:
 
         query = filters["query"].lower()
         if query and query not in system_name.lower() and query not in station_name.lower():
+            return False
+        return True
+
+    @staticmethod
+    def _matches_commodity_station_filters(
+        *,
+        price: int,
+        quantity: int,
+        distance_ly: float | None,
+        arrival_distance_ls: int | None,
+        max_distance_ly: float,
+        max_station_distance_ls: int,
+    ) -> bool:
+        if price <= 0 or quantity <= 0:
+            return False
+        if distance_ly is None or distance_ly > max_distance_ly:
+            return False
+        if arrival_distance_ls is not None and arrival_distance_ls > max_station_distance_ls:
             return False
         return True
 
