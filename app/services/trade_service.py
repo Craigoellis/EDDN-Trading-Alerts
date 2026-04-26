@@ -458,12 +458,14 @@ class TradeService:
             for trade in user_opportunities:
                 user_alert_key = trade.get("user_alert_key", trade["alert_key"])
                 route_group_keys = self._build_route_group_keys(trade)
-                existing_delivery = self._find_matching_alert_delivery(
+                existing_delivery = self._find_exact_alert_delivery(
                     deliveries=existing_deliveries,
                     alert_key=user_alert_key,
-                    route_group_keys=route_group_keys,
                 )
                 delivery_alert_key = (existing_delivery or {}).get("alert_key", user_alert_key)
+
+                if delivery_alert_key in active_keys:
+                    continue
 
                 if not filter_record.get("is_enabled") and not (
                     (existing_delivery or {}).get("status", "active") == "active"
@@ -471,9 +473,8 @@ class TradeService:
                 ):
                     continue
 
-                if existing_delivery is None:
-                    if self._has_conflicting_group_owner(active_group_owners, route_group_keys, delivery_alert_key):
-                        continue
+                if self._has_conflicting_group_owner(active_group_owners, route_group_keys, delivery_alert_key):
+                    continue
 
                 active_keys.add(delivery_alert_key)
 
@@ -527,15 +528,18 @@ class TradeService:
         active_group_owners = self._build_active_route_group_owners(
             existing_deliveries
         )
+        processed_alert_keys = set()
         for trade in user_opportunities:
             user_alert_key = trade.get("user_alert_key", trade["alert_key"])
             route_group_keys = self._build_route_group_keys(trade)
-            existing_delivery = self._find_matching_alert_delivery(
+            existing_delivery = self._find_exact_alert_delivery(
                 deliveries=existing_deliveries,
                 alert_key=user_alert_key,
-                route_group_keys=route_group_keys,
             )
             delivery_alert_key = (existing_delivery or {}).get("alert_key", user_alert_key)
+
+            if delivery_alert_key in processed_alert_keys:
+                continue
 
             if not filter_record.get("is_enabled") and not (
                 (existing_delivery or {}).get("status", "active") == "active"
@@ -543,9 +547,8 @@ class TradeService:
             ):
                 continue
 
-            if existing_delivery is None:
-                if self._has_conflicting_group_owner(active_group_owners, route_group_keys, delivery_alert_key):
-                    continue
+            if self._has_conflicting_group_owner(active_group_owners, route_group_keys, delivery_alert_key):
+                continue
 
             alert_result = self._alert_service.send_trade_alert_to_chat(
                 chat_id=str(user["telegram_chat_id"]),
@@ -575,6 +578,7 @@ class TradeService:
                 trade_snapshot=self._build_trade_snapshot(trade),
             )
             self._assign_route_group_owners(active_group_owners, route_group_keys, delivery_alert_key)
+            processed_alert_keys.add(delivery_alert_key)
             delivered_count += 1
         return delivered_count
 
@@ -778,18 +782,10 @@ class TradeService:
                 owners.setdefault(route_group_key, delivery["alert_key"])
         return owners
 
-    def _find_matching_alert_delivery(self, *, deliveries: list[dict], alert_key: str, route_group_keys: list[str]) -> dict | None:
+    @staticmethod
+    def _find_exact_alert_delivery(*, deliveries: list[dict], alert_key: str) -> dict | None:
         for delivery in deliveries:
             if delivery.get("alert_key") == alert_key:
-                return delivery
-        if not route_group_keys:
-            return None
-        for delivery in deliveries:
-            if delivery.get("status") != "active":
-                continue
-            trade_snapshot = delivery.get("trade_snapshot") or {}
-            existing_route_group_keys = self._build_route_group_keys(trade_snapshot)
-            if any(route_group_key in existing_route_group_keys for route_group_key in route_group_keys):
                 return delivery
         return None
 
