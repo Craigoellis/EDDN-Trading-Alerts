@@ -35,4 +35,6 @@ class AppConfig:
             "landing_pad_size": os.getenv("LANDING_PAD_SIZE", "Any"),
             "fleet_carrier_mode": os.getenv("FLEET_CARRIER_MODE", "include").lower(),
             "max_station_distance_ls": int(os.getenv("MAX_STATION_DISTANCE_LS", "20000")),
+            "exclude_buy_fleet_carriers": os.getenv("EXCLUDE_BUY_FLEET_CARRIERS", "true").lower()
+            not in {"false", "0", "no", "off"},
         }

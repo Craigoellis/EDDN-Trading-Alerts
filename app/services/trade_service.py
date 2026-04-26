@@ -598,6 +598,7 @@ class TradeService:
         demand_min = filters["demand_min"]
         origin_system = filters["distance_origin_system"]
         fleet_carrier_mode = filters["fleet_carrier_mode"]
+        exclude_buy_fleet_carriers = filters["exclude_buy_fleet_carriers"]
 
         for commodity_name, entries in markets.items():
             source_entries = [
@@ -628,7 +629,9 @@ class TradeService:
                     continue
 
                 source_context = self._get_station_context(source_entry, station_context_cache)
-                if source_context["skip_buy"]:
+                if source_context["skip_buy_always"]:
+                    continue
+                if exclude_buy_fleet_carriers and source_context["is_fleet_carrier"]:
                     continue
                 if source_context["distance_ls"] is not None and source_context["distance_ls"] > max_station_distance_ls:
                     continue
@@ -679,6 +682,7 @@ class TradeService:
                         sell_station=destination_context["station"],
                         buy_station_type=source_context["station_type"],
                         sell_station_type=destination_context["station_type"],
+                        exclude_buy_fleet_carriers=exclude_buy_fleet_carriers,
                     )
                     if not opportunity:
                         continue
@@ -713,7 +717,11 @@ class TradeService:
             "station_type": station_type,
             "pad_size": station.get("pad") or "Unknown",
             "distance_ls": distance_ls,
-            "skip_buy": "fleet carrier" in station_type.lower() or "planetary outpost" in station_type.lower(),
+            "is_fleet_carrier": self._is_fleet_carrier_endpoint(
+                station_name=entry["station"],
+                station_type=station_type,
+            ),
+            "skip_buy_always": "planetary outpost" in station_type.lower(),
             "skip_sell": "planetary outpost" in station_type.lower(),
         }
         cache[cache_key] = context
@@ -911,6 +919,10 @@ class TradeService:
         ).lower()
         if filters["fleet_carrier_mode"] not in {"exclude", "only", "include"}:
             filters["fleet_carrier_mode"] = "include"
+        filters["exclude_buy_fleet_carriers"] = self._coerce_bool(
+            params.get("exclude_buy_fleet_carriers"),
+            filters.get("exclude_buy_fleet_carriers", True),
+        )
         return filters
 
     def _build_trade_opportunity(
@@ -924,6 +936,7 @@ class TradeService:
         sell_station: dict | None = None,
         buy_station_type: str | None = None,
         sell_station_type: str | None = None,
+        exclude_buy_fleet_carriers: bool = True,
     ) -> dict | None:
         buy_price = source_entry["buy"]
         sell_price = destination_entry["sell"]
@@ -944,7 +957,10 @@ class TradeService:
         buy_station_type = buy_station_type or buy_station.get("type") or "Unknown"
         sell_station_type = sell_station_type or sell_station.get("type") or "Unknown"
 
-        if "fleet carrier" in buy_station_type.lower():
+        if exclude_buy_fleet_carriers and self._is_fleet_carrier_endpoint(
+            station_name=source_entry["station"],
+            station_type=buy_station_type,
+        ):
             return None
         if "planetary outpost" in buy_station_type.lower() or "planetary outpost" in sell_station_type.lower():
             return None
@@ -1099,7 +1115,14 @@ class TradeService:
             "max_station_distance_ls": filter_record["max_station_distance_ls"],
             "landing_pad_size": filter_record["landing_pad_size"],
             "fleet_carrier_mode": filter_record.get("fleet_carrier_mode") or "include",
+            "exclude_buy_fleet_carriers": filter_record.get("exclude_buy_fleet_carriers", True),
         }
+
+    def _is_fleet_carrier_endpoint(self, *, station_name: str, station_type: str) -> bool:
+        return (
+            "fleet carrier" in (station_type or "").lower()
+            or self._station_service.extract_carrier_callsign(station_name) is not None
+        )
 
     @staticmethod
     def _sort_station_commodities(rows: list[dict], sort_by: str, sort_order: str) -> list[dict]:
@@ -1133,7 +1156,7 @@ class TradeService:
         return decorated
 
     def _build_endpoint_identity(self, system_name: str, station_name: str, station_type: str) -> str:
-        if "fleet carrier" in (station_type or "").lower():
+        if self._is_fleet_carrier_endpoint(station_name=station_name, station_type=station_type):
             callsign = self._station_service.extract_carrier_callsign(station_name)
             if callsign:
                 return f"fc:{callsign}"
@@ -1243,3 +1266,11 @@ class TradeService:
             return max(float(value), minimum)
         except (TypeError, ValueError):
             return default
+
+    @staticmethod
+    def _coerce_bool(value, default: bool = False) -> bool:
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in {"1", "true", "yes", "on"}

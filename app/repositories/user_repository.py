@@ -96,6 +96,7 @@ class UserRepository:
                 "max_station_distance_ls": filter_data["max_station_distance_ls"],
                 "landing_pad_size": filter_data["landing_pad_size"],
                 "fleet_carrier_mode": filter_data["fleet_carrier_mode"],
+                "exclude_buy_fleet_carriers": filter_data["exclude_buy_fleet_carriers"],
                 "is_enabled": filter_data["is_enabled"],
                 "created_at": self._now_iso(),
             }
@@ -320,6 +321,7 @@ class UserRepository:
         normalized["max_origin_distance_ly"] = normalized.get("max_origin_distance_ly", legacy_distance)
         normalized["max_route_distance_ly"] = normalized.get("max_route_distance_ly", legacy_distance)
         normalized["fleet_carrier_mode"] = normalized.get("fleet_carrier_mode") or "include"
+        normalized["exclude_buy_fleet_carriers"] = normalized.get("exclude_buy_fleet_carriers", True)
         return normalized
 
     @staticmethod

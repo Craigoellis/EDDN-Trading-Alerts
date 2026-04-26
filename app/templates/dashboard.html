@@ -92,6 +92,13 @@
                             <option value="only" {% if initial_data.filters.fleet_carrier_mode == 'only' %}selected{% endif %}>Only Fleet Carriers</option>
                         </select>
                     </label>
+                    <label>
+                        <span>Buying From Fleet Carriers</span>
+                        <select name="exclude_buy_fleet_carriers">
+                            <option value="true" {% if initial_data.filters.exclude_buy_fleet_carriers %}selected{% endif %}>Off</option>
+                            <option value="false" {% if not initial_data.filters.exclude_buy_fleet_carriers %}selected{% endif %}>On</option>
+                        </select>
+                    </label>
 
                     <div class="form-actions">
                         <button type="submit">Apply Filters</button>
