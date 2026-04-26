@@ -632,6 +632,8 @@ class TradeService:
                 source_context = self._get_station_context(source_entry, station_context_cache)
                 if source_context["skip_buy_always"]:
                     continue
+                if source_context["is_unknown_station_type"]:
+                    continue
                 if exclude_buy_fleet_carriers and source_context["is_fleet_carrier"]:
                     continue
                 if surface_station_mode == "exclude" and source_context["is_surface_station"]:
@@ -650,6 +652,8 @@ class TradeService:
 
                     destination_context = self._get_station_context(destination_entry, station_context_cache)
                     if destination_context["skip_sell"]:
+                        continue
+                    if destination_context["is_unknown_station_type"]:
                         continue
                     if surface_station_mode == "exclude" and destination_context["is_surface_station"]:
                         continue
@@ -728,6 +732,7 @@ class TradeService:
                 station_type=station_type,
             ),
             "is_surface_station": self._is_surface_station_type(station_type),
+            "is_unknown_station_type": self._is_unknown_station_type(station_type),
             "skip_buy_always": False,
             "skip_sell": False,
         }
@@ -975,6 +980,8 @@ class TradeService:
             station_type=buy_station_type,
         ):
             return None
+        if self._is_unknown_station_type(buy_station_type) or self._is_unknown_station_type(sell_station_type):
+            return None
         if surface_station_mode == "exclude" and (
             self._is_surface_station_type(buy_station_type)
             or self._is_surface_station_type(sell_station_type)
@@ -1155,6 +1162,10 @@ class TradeService:
                 "odyssey settlement",
             )
         )
+
+    @staticmethod
+    def _is_unknown_station_type(station_type: str) -> bool:
+        return not (station_type or "").strip() or (station_type or "").strip().lower() == "unknown"
 
     @staticmethod
     def _sort_station_commodities(rows: list[dict], sort_by: str, sort_order: str) -> list[dict]:
