@@ -37,4 +37,5 @@ class AppConfig:
             "max_station_distance_ls": int(os.getenv("MAX_STATION_DISTANCE_LS", "20000")),
             "exclude_buy_fleet_carriers": os.getenv("EXCLUDE_BUY_FLEET_CARRIERS", "true").lower()
             not in {"false", "0", "no", "off"},
+            "surface_station_mode": os.getenv("SURFACE_STATION_MODE", "include").lower(),
         }

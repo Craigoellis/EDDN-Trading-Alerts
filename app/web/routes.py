@@ -166,6 +166,7 @@ def create_account_filter():
             "landing_pad_size": filter_payload["landing_pad_size"],
             "fleet_carrier_mode": filter_payload["fleet_carrier_mode"],
             "exclude_buy_fleet_carriers": filter_payload["exclude_buy_fleet_carriers"],
+            "surface_station_mode": filter_payload["surface_station_mode"],
             "is_enabled": request.form.get("is_enabled", "on") == "on",
         },
     )

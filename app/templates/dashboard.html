@@ -99,6 +99,13 @@
                             <option value="false" {% if not initial_data.filters.exclude_buy_fleet_carriers %}selected{% endif %}>On</option>
                         </select>
                     </label>
+                    <label>
+                        <span>Surface Stations</span>
+                        <select name="surface_station_mode">
+                            <option value="include" {% if initial_data.filters.surface_station_mode == 'include' %}selected{% endif %}>Include</option>
+                            <option value="exclude" {% if initial_data.filters.surface_station_mode == 'exclude' %}selected{% endif %}>Exclude</option>
+                        </select>
+                    </label>
 
                     <div class="form-actions">
                         <button type="submit">Apply Filters</button>

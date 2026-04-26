@@ -104,6 +104,13 @@
                         <option value="false">On</option>
                     </select>
                 </label>
+                <label>
+                    <span>Surface Stations</span>
+                    <select name="surface_station_mode">
+                        <option value="include" selected>Include</option>
+                        <option value="exclude">Exclude</option>
+                    </select>
+                </label>
                 <label class="checkbox-row">
                     <input type="checkbox" name="is_enabled" checked>
                     <span>Filter is enabled</span>
@@ -137,6 +144,7 @@
                             <th>Route Distance</th>
                             <th>Carriers</th>
                             <th>Buy FC</th>
+                            <th>Surface</th>
                             <th>Pad</th>
                             <th>Enabled</th>
                             <th>Actions</th>
@@ -155,6 +163,7 @@
                                     <td>{{ filter_row.max_route_distance_ly }} LY</td>
                                     <td>{{ filter_row.fleet_carrier_mode|title }}</td>
                                     <td>{{ "Off" if filter_row.exclude_buy_fleet_carriers else "On" }}</td>
+                                    <td>{{ filter_row.surface_station_mode|title }}</td>
                                     <td>{{ filter_row.landing_pad_size }}</td>
                                     <td>
                                         <span class="status-badge {{ 'status-badge--active' if filter_row.is_enabled else 'status-badge--paused' }}">
@@ -176,7 +185,7 @@
                             {% endfor %}
                         {% else %}
                             <tr>
-                                <td colspan="12" class="empty-table-cell">No alert filters saved yet.</td>
+                                <td colspan="13" class="empty-table-cell">No alert filters saved yet.</td>
                             </tr>
                         {% endif %}
                     </tbody>

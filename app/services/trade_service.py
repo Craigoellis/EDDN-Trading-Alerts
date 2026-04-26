@@ -599,6 +599,7 @@ class TradeService:
         origin_system = filters["distance_origin_system"]
         fleet_carrier_mode = filters["fleet_carrier_mode"]
         exclude_buy_fleet_carriers = filters["exclude_buy_fleet_carriers"]
+        surface_station_mode = filters["surface_station_mode"]
 
         for commodity_name, entries in markets.items():
             source_entries = [
@@ -633,6 +634,8 @@ class TradeService:
                     continue
                 if exclude_buy_fleet_carriers and source_context["is_fleet_carrier"]:
                     continue
+                if surface_station_mode == "exclude" and source_context["is_surface_station"]:
+                    continue
                 if source_context["distance_ls"] is not None and source_context["distance_ls"] > max_station_distance_ls:
                     continue
                 if not self._station_service.supports_pad_size(source_context["pad_size"], required_pad_size):
@@ -647,6 +650,8 @@ class TradeService:
 
                     destination_context = self._get_station_context(destination_entry, station_context_cache)
                     if destination_context["skip_sell"]:
+                        continue
+                    if surface_station_mode == "exclude" and destination_context["is_surface_station"]:
                         continue
                     if destination_context["distance_ls"] is not None and destination_context["distance_ls"] > max_station_distance_ls:
                         continue
@@ -683,6 +688,7 @@ class TradeService:
                         buy_station_type=source_context["station_type"],
                         sell_station_type=destination_context["station_type"],
                         exclude_buy_fleet_carriers=exclude_buy_fleet_carriers,
+                        surface_station_mode=surface_station_mode,
                     )
                     if not opportunity:
                         continue
@@ -721,8 +727,9 @@ class TradeService:
                 station_name=entry["station"],
                 station_type=station_type,
             ),
-            "skip_buy_always": "planetary outpost" in station_type.lower(),
-            "skip_sell": "planetary outpost" in station_type.lower(),
+            "is_surface_station": self._is_surface_station_type(station_type),
+            "skip_buy_always": False,
+            "skip_sell": False,
         }
         cache[cache_key] = context
         return context
@@ -923,6 +930,11 @@ class TradeService:
             params.get("exclude_buy_fleet_carriers"),
             filters.get("exclude_buy_fleet_carriers", True),
         )
+        filters["surface_station_mode"] = str(
+            params.get("surface_station_mode", filters.get("surface_station_mode", "include"))
+        ).lower()
+        if filters["surface_station_mode"] not in {"exclude", "include"}:
+            filters["surface_station_mode"] = "include"
         return filters
 
     def _build_trade_opportunity(
@@ -937,6 +949,7 @@ class TradeService:
         buy_station_type: str | None = None,
         sell_station_type: str | None = None,
         exclude_buy_fleet_carriers: bool = True,
+        surface_station_mode: str = "include",
     ) -> dict | None:
         buy_price = source_entry["buy"]
         sell_price = destination_entry["sell"]
@@ -962,7 +975,10 @@ class TradeService:
             station_type=buy_station_type,
         ):
             return None
-        if "planetary outpost" in buy_station_type.lower() or "planetary outpost" in sell_station_type.lower():
+        if surface_station_mode == "exclude" and (
+            self._is_surface_station_type(buy_station_type)
+            or self._is_surface_station_type(sell_station_type)
+        ):
             return None
 
         updated_at = max(source_entry["updated"], destination_entry["updated"])
@@ -1116,12 +1132,28 @@ class TradeService:
             "landing_pad_size": filter_record["landing_pad_size"],
             "fleet_carrier_mode": filter_record.get("fleet_carrier_mode") or "include",
             "exclude_buy_fleet_carriers": filter_record.get("exclude_buy_fleet_carriers", True),
+            "surface_station_mode": filter_record.get("surface_station_mode") or "include",
         }
 
     def _is_fleet_carrier_endpoint(self, *, station_name: str, station_type: str) -> bool:
         return (
             "fleet carrier" in (station_type or "").lower()
             or self._station_service.extract_carrier_callsign(station_name) is not None
+        )
+
+    @staticmethod
+    def _is_surface_station_type(station_type: str) -> bool:
+        station_type_normalized = (station_type or "").lower()
+        return any(
+            surface_type in station_type_normalized
+            for surface_type in (
+                "planetary port",
+                "planetary outpost",
+                "planetary base",
+                "surface port",
+                "surface settlement",
+                "odyssey settlement",
+            )
         )
 
     @staticmethod
